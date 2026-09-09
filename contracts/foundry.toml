@@ -1,0 +1,21 @@
+# Foundry config — RFC-CIT-COOP-0001 contracts.
+# Bootstrap: `forge install foundry-rs/forge-std` then `forge test` (expect RED).
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = ["lib"]
+solc = "0.8.26"
+optimizer = true
+optimizer_runs = 200
+# Determinism inputs — MUST match citrate-chain/contracts/foundry.toml so the co-op
+# factory's creationCode (and thus its CREATE2 address) is byte-reproducible across
+# machines and re-rolls. `bytecode_hash = "none"` strips the trailing solc metadata
+# hash (which otherwise varies with paths/settings); `evm_version` pins the opcode set
+# to the chain's. See script/Salts.sol.
+evm_version = "cancun"
+bytecode_hash = "none"
+
+# Fork tests (revenue rail A against live ModelRegistry/Marketplace) read this.
+[rpc_endpoints]
+citrate_testnet = "${CITRATE_RPC_URL}"

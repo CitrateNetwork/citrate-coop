@@ -1,0 +1,8 @@
+contracts/out/
+contracts/cache/
+contracts/lib/
+contracts/broadcast/
+scripts/tla2tools.jar
+scripts/.tlc/
+states/
+*.log

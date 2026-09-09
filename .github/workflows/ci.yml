@@ -1,0 +1,27 @@
+name: coop-ci
+# RFC-CIT-COOP-0001 CI: TLA+ regression (g1-formal tripwire) + Foundry suite (g5-audit).
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  formal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - name: TLC model-check all four coop specs
+        run: ./scripts/run-tlc.sh   # fetches tla2tools.jar; -deadlock; fails on any invariant violation
+
+  forge:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: contracts } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge install foundry-rs/forge-std --no-commit
+      - name: Build
+        run: forge build --sizes --use 0.8.36
+      - name: Test (unit + fuzz + invariants)
+        run: forge test -vv --use 0.8.36
