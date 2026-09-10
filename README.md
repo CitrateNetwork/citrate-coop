@@ -1,72 +1,54 @@
-# citrate-coop — Model Cooperative (RFC-CIT-COOP-0001)
+# citrate-coop
+> On-chain cooperative-ownership layer for the Citrate Network — the contracts that make a
+> community-trained model (see [`nat`](https://github.com/CitrateNetwork/nat)) community-owned.
 
-The on-chain ownership layer that makes a community-trained NAT model a
-**collectively-owned, revenue-bearing California Cooperative Corporation**. Contributors
-earn democratic membership + patronage dividends + a 50M SALT emission for verified
-training work; the model's revenue (on-chain SALT, x402, fiat) flows back to them.
+## What it is
+Solidity contracts for cooperative governance and patronage: `ModelCooperative`,
+`CitrateCooperativeFactory` / `CoopDeployer`, `ContributionRewardPool`, `MembershipSBT`,
+and `CitrateAdminSafe`. Design and formal specs are in `COOP_OWNERSHIP_CONTRACT_SPEC.md`,
+`SETTLEMENT_SEAM.md`, `specs/`, and the `.agentile/` ADRs. Concept docs:
+https://docs.citrate.ai.
 
-This is an **agentile program**: everything is driven **TLA+ → Gherkin → planset/sprint →
-failing tests → code → refactor → retro/journal**. The contracts compose with live
-citrate-chain contracts and deploy to chain **40204**.
+## Prerequisites
+- [Foundry](https://book.getfoundry.sh/) (`forge`, `cast`) — `curl -L https://foundry.paradigm.xyz | bash && foundryup`
+- git
 
-## Layout
-
-```
-citrate-coop/
-├── COOP_OWNERSHIP_CONTRACT_SPEC.md     # full prose design (v2) — the architecture
-├── specs/tla/coop/                     # 1. FORMAL — 4 TLA+ modules + .cfg (the driver)
-│   ├── CoopLifecycle.{tla,cfg}
-│   ├── PatronageDividend.{tla,cfg}
-│   ├── MembershipVoting.{tla,cfg}
-│   └── ContributionRewardPool.{tla,cfg}
-├── features/                           # 2. BDD — Gherkin, each scenario ↔ a TLA invariant
-│   └── coop_*.feature  (6)
-├── .agentile/planset/                  # 3. PLANSET — gates + decisions
-│   ├── gates.yaml                      #    G1–G5 exit criteria (machine-readable)
-│   ├── README.md                       #    program overview + spec↔feature↔gate map
-│   └── decisions/ADR-0001..0006.md     #    the six load-bearing decisions
-├── .agentile/sprints/active/           # 4. SPRINT — COOP-S1, WP-0..9 (Rule-11 acceptance)
-│   └── 2026-06-25-sprint-coop-s1-cooperative-foundation/SPRINT.md
-├── contracts/                          # 5. RED — skeletons (revert) + failing Foundry tests
-│   ├── foundry.toml
-│   ├── src/{MembershipSBT,PatronageLedger}.sol     (skeletons; rest land per WP)
-│   └── test/{MembershipSBT,PatronageLedger}.t.sol  (RED)
-└── scripts/run-tlc.sh                  # TLC regression (WP-0)
-```
-
-## The two rails (the whole idea)
-
-| Rail | Token | Drives | Law (CA co-op / AB 816) |
-|------|-------|--------|--------------------------|
-| **Membership** | soulbound `MembershipSBT`, 1/identity | **one-member-one-vote** governance | democratic control; worker ≥51% |
-| **Patronage** | non-transferable units = `compute × data-quality` | **patronage dividend** + 50M CRP emission | distribution by patronage, not capital |
-
-They never read each other's state (ADR-0001) — more contribution never buys more votes;
-more votes never earn more dividend.
-
-## Running the loop
-
+## Build from source
 ```bash
-# 1. FORMAL — verify the specs (WP-0)
-./scripts/run-tlc.sh                 # TLC-green all four modules → flips gates.yaml g1-formal
-
-# 5. RED — see the failing tests
-cd contracts && forge install foundry-rs/forge-std && forge test   # expect RED until WP-1..
-
-# Status
-cat .agentile/planset/gates.yaml     # gate ladder G1–G5
+cd contracts
+forge build            # compiles src/ ; artifacts under contracts/out/
 ```
 
-## Status (2026-06-25)
+## Run locally (tests)
+```bash
+cd contracts
+forge test -vvv        # unit + property tests
+./scripts/run-tlc.sh   # (optional) TLA+/TLC model-check of the coop spec
+```
 
-G1 **partial** — TLA+ drafted (TLC run pending), Gherkin + ADRs done, counsel review open.
-G2–G5 **pending**. WP-1..6 + WP-9 build now against live contracts; WP-7 (fiat ramp) needs a
-licensed MSB custodian; WP-8 (federated join) is gated on NAT Gate-4. See the master brief
-`../FEDERATED_TRAINING_MASTER_BRIEF.md` §8 for where this sits in the campaign.
+## Connect it locally
+Deploy the cooperative contracts onto a local Citrate devnet:
+1. Run a local node from [`citrate-chain`](https://github.com/CitrateNetwork/citrate-chain):
+   `citrate devnet` → JSON-RPC `http://127.0.0.1:8545` (chain id 40204). The devnet
+   pre-funds Foundry account #0, so no faucet is needed.
+2. Deploy with the script in `contracts/script/` (foundry pre-funded key):
+   ```bash
+   cd contracts
+   forge script script/<Deploy>.s.sol --rpc-url http://localhost:8545 \
+     --private-key $PRIVATE_KEY --broadcast
+   ```
+   Note the deployed `CitrateCooperativeFactory` address for downstream use.
 
-## Composition (reuse, don't reinvent)
+## Configuration
+Deployment addresses/params live in `contracts/script/` and the spec docs. Chain id is
+40204; see `LOCAL_STACK.md` in `citrate-docs` for the full local stack.
 
-`KYCRegistry`, `ModelRegistry` + `ModelMarketplace` (owner-pay revenue, zero change),
-`LoRAFactory`, `ComputePoolTraining`, `TreasuryGovernor` (pattern), `WrappedSALT` +
-`X402Facilitator`/`X402Paywall`, `StablecoinTreasury` + `ComputePricingOracle`,
-`IPFSIncentivesV3` (commit-reveal/prevrandao precedent), `AgentDecisionRegistry`.
+## Links
+- Docs: https://docs.citrate.ai
+- Depends on / pairs with: [citrate-chain](https://github.com/CitrateNetwork/citrate-chain), [nat](https://github.com/CitrateNetwork/nat)
+- Contributing (DCO): CONTRIBUTING.md · Security: SECURITY.md · License: LICENSE
+
+## License
+**Source-available (BUSL-1.1)** — free for personal/non-commercial use; commercial or
+hosted use requires a membership license. Converts to Apache-2.0 on the Change Date. Not
+OSI "open source." See `LICENSE`, `PATENTS.md`, `TRADEMARK.md`.
