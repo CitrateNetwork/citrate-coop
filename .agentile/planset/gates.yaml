@@ -1,0 +1,141 @@
+# Machine-readable gate definitions + exit criteria (Agentile Research Method §3).
+# CI reads this to check whether a gate's acceptance is green before a merge.
+# Status: pending | partial | met.  Program: RFC-CIT-COOP-0001 (Model Cooperative).
+# Companion design doc: ../../../COOP_OWNERSHIP_CONTRACT_SPEC.md
+version: 1
+program: RFC-CIT-COOP-0001
+
+gates:
+  - id: gate1
+    name: Theory locked
+    status: partial
+    exit_criteria:
+      - id: g1-planset
+        desc: Planset + program overview in the repo
+        met: true
+        evidence: .agentile/planset/README.md, COOP_OWNERSHIP_CONTRACT_SPEC.md
+      - id: g1-formal
+        desc: Four TLA+ modules written and TLC-green
+        met: true
+        note: >-
+          TLC-green 2026-06-25 (scripts/run-tlc.sh, tla2tools v1.7.1, -deadlock —
+          safety specs with intentional terminal states): CoopLifecycle (94 distinct
+          states), PatronageDividend (2892), MembershipVoting (7474),
+          ContributionRewardPool (2476). No invariant violations. CI tripwire re-run
+          is COOP-S1 WP-0 remaining item.
+        evidence: specs/tla/coop/ ; scripts/run-tlc.sh
+      - id: g1-features
+        desc: Gherkin acceptance set written, organized by surface
+        met: true
+        evidence: features/
+      - id: g1-decisions
+        desc: ADRs recorded for the six load-bearing decisions
+        met: true
+        evidence: .agentile/planset/decisions/
+      - id: g1-counsel
+        desc: Counsel review of CA Cooperative Corporation structure + SALT/patronage characterization
+        met: false
+        note: open — securities + co-op bylaws parity; MSB review for fiat rail
+    reviewers: [legal/IP counsel TBD, securities counsel TBD]
+
+  - id: gate2
+    name: Two rails — membership + patronage
+    status: met
+    exit_criteria:
+      - id: g2-membership
+        desc: MembershipSBT green against coop_membership.feature (soulbound, one-per-identity, worker-control)
+        met: true
+        note: 9 tests green (incl. fuzz worker-majority) 2026-06-25
+        evidence: contracts/test/MembershipSBT.t.sol
+      - id: g2-patronage
+        desc: PatronageLedger green against coop_patronage.feature (units = compute x quality, provenance-bound, idempotent)
+        met: true
+        note: 9 tests green (incl. per-year + fuzz) 2026-06-25
+        evidence: contracts/test/PatronageLedger.t.sol
+      - id: g2-separation
+        desc: Two-rail separation — patronage never affects votes, votes never affect dividend
+        met: true
+        note: >-
+          Demonstrated by construction: CooperativeGovernor reads only MembershipSBT;
+          ModelCooperative.claimDividend reads only PatronageLedger. No cross-rail call path.
+        evidence: src/CooperativeGovernor.sol, src/ModelCooperative.sol
+      - id: g2-lifecycle
+        desc: CoopLifecycle guards green (contribution window, revenue gating)
+        met: true
+        note: 8 tests green (lifecycle guards, no-revenue-before-active, wind-down close) 2026-06-25
+        evidence: contracts/test/ModelCooperative.t.sol
+
+  - id: gate3
+    name: Revenue, emission, governance
+    status: met
+    exit_criteria:
+      - id: g3-dividend
+        desc: Patronage dividend green against coop_revenue_dividend.feature (conservation, no-retroactive, KYC-gated claim)
+        met: true
+        note: >-
+          8 unit + 3 invariant tests green 2026-06-25. Invariant suite caught a 1-wei
+          MasterChef over-accrual (debt stored post-division); fixed by storing debt
+          pre-division so accrued is an exact floor. Solvency + conservation hold.
+        evidence: contracts/test/ModelCooperative.t.sol, contracts/test/invariant/DividendConservation.t.sol
+      - id: g3-crp
+        desc: ContributionRewardPool green against coop_reward_pool.feature (hard cap, by-year, reserve skim, linear vest)
+        met: true
+        note: 7 tests green incl. total-cap lands exactly at the hard cap (grants + reserve) 2026-06-25
+        evidence: contracts/test/ContributionRewardPool.t.sol
+      - id: g3-governor
+        desc: CooperativeGovernor green against coop_governance.feature (1-vote, commit-reveal, delegation, AB-816 worker majority)
+        met: true
+        note: >-
+          9 tests green. Delegation soundness: delegation locked while any vote window is
+          open (lastVotingDeadline) so rep weight = 1 + delegatorCount conserves votes.
+        evidence: contracts/test/CooperativeGovernor.t.sol
+      - id: g3-railsAB
+        desc: Revenue rails A (owner-pay) + B (x402) green against coop_revenue_routing.feature
+        met: true
+        note: 4 tests green vs mock ModelRegistry/Marketplace/x402; syncDirectRevenue credits direct owner-pay. Live-fork = g4-ownerwire.
+        evidence: contracts/test/RevenueRouting.t.sol
+
+  - id: gate4
+    name: Federated join + live wiring
+    status: partial
+    exit_criteria:
+      - id: g4-settler
+        desc: nat-federated Settlement seam calls commitRound + recordContribution; patronage bound to merged_hash
+        met: partial
+        note: >-
+          On-chain seam green + tested (FederatedSettlement.t.sol, 3 tests): coordinator commits
+          merged_hash then records each node's reward_weight as patronage, provenance-bound,
+          SETTLER-only. Rust Settlement impl + live multi-node run gated on NAT Gate-4.
+        evidence: contracts/test/FederatedSettlement.t.sol, SETTLEMENT_SEAM.md
+      - id: g4-railC
+        desc: Fiat rail C (Stripe/Plaid -> custodian -> CooperativeFiatRamp) green incl. hold-period + chargeback safety
+        met: true
+        note: >-
+          On-chain ramp green (4 tests): hold-period release, chargeback absorbed by ramp
+          reserve (never claws back distributed dividends), attestor-gated. Off-chain MSB
+          custodian + oracle conversion is an ops/legal dependency tracked separately (g1-counsel).
+        evidence: contracts/test/CooperativeFiatRamp.t.sol
+      - id: g4-ownerwire
+        desc: Co-op set as ModelRegistry/Marketplace owner on a fork; end-to-end revenue inflow verified
+        met: partial
+        note: rail A green vs mock ModelRegistry/Marketplace; live-fork against deployed contracts needs an RPC (CI secret).
+        evidence: contracts/test/RevenueRouting.t.sol
+
+  - id: gate5
+    name: Productize + deploy
+    status: partial
+    exit_criteria:
+      - id: g5-factory
+        desc: CitrateCooperativeFactory deploys + registers a co-op; address-book entry
+        met: true
+        note: 3 tests green incl. end-to-end governance-drives-activation via the uniform execute() path.
+        evidence: contracts/test/CitrateCooperativeFactory.t.sol
+      - id: g5-audit
+        desc: Tier-1 audit clean; TLA+ regression in CI; Foundry invariant suite green
+        met: partial
+        note: >-
+          TLA+ regression wired in CI (.github/workflows/ci.yml) + 4 specs green; Foundry
+          invariant suite green (3, solvency/conservation). External Tier-1 audit pending.
+      - id: g5-counsel
+        desc: Counsel sign-off — CA co-op bylaws <-> contract parity; mainnet gate
+        met: false
