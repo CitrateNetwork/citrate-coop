@@ -1,4 +1,6 @@
 # citrate-coop
+
+*Part of the **[Citrate Network](https://citrate.ai)** — own the means of computation. · [Docs](https://docs.citrate.ai) · [Run a node](https://citrate.ai/download) · [Contribute → free membership](https://github.com/CitrateNetwork/.github/blob/main/CONTRIBUTING.md)*
 > On-chain cooperative-ownership layer for the Citrate Network — the contracts that make a
 > community-trained model (see [`nat`](https://github.com/CitrateNetwork/nat)) community-owned.
 
