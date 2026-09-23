@@ -1,6 +1,7 @@
 name: coop-ci
 # RFC-CIT-COOP-0001 CI: TLA+ regression (g1-formal tripwire) + Foundry suite (g5-audit).
 on:
+  workflow_dispatch:
   push: { branches: [main] }
   pull_request:
 
