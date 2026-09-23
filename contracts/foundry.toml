@@ -5,14 +5,16 @@ src = "src"
 test = "test"
 out = "out"
 libs = ["lib"]
-solc = "0.8.26"
+solc = "0.8.36"
 optimizer = true
 optimizer_runs = 200
 # Determinism inputs — MUST match citrate-chain/contracts/foundry.toml so the co-op
 # factory's creationCode (and thus its CREATE2 address) is byte-reproducible across
-# machines and re-rolls. `bytecode_hash = "none"` strips the trailing solc metadata
-# hash (which otherwise varies with paths/settings); `evm_version` pins the opcode set
-# to the chain's. See script/Salts.sol.
+# machines and re-rolls. `solc` is pinned to 0.8.36 to match the chain's contracts
+# foundry.toml (bumped 2026-09-23; was a stale 0.8.26) — CI already builds/tests with
+# `--use 0.8.36`, so the default profile now reproduces the exact CI/ceremony bytecode.
+# `bytecode_hash = "none"` strips the trailing solc metadata hash (which otherwise varies
+# with paths/settings); `evm_version` pins the opcode set to the chain's. See script/Salts.sol.
 evm_version = "cancun"
 bytecode_hash = "none"
 

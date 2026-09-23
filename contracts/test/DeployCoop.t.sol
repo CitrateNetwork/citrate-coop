@@ -44,7 +44,13 @@ contract DeployCoopDeterminismTest is Test {
         );
         assertEq(
             coopDeployer,
-            0xd7CBAeB1C1d3A3a12707297A96aE454b37EC56Fe, // FROZEN CoopDeployer canonical (2026-08-29)
+            // Re-frozen 2026-09-23: solc pinned up from 0.8.26 to 0.8.36 to match
+            // citrate-chain/contracts/foundry.toml (the byte-reproducibility invariant this
+            // repo's foundry.toml declares). The compiler bump changes CoopDeployer's
+            // creationCode, so its canonical CREATE2 address moves deliberately from the
+            // stale 0xd7CBAeB1…56Fe (0.8.26 freeze) to this 0.8.36 value. Co-op factory is
+            // not yet deployed on 40204, so the address manifest must be regenerated to match.
+            0xbfFD95A500c55F28d670A079cF96986606b9Aac4, // FROZEN CoopDeployer canonical (solc 0.8.36)
             "CoopDeployer canonical CREATE2 address drifted"
         );
         // The factory address now folds the CoopDeployer arg into init_code:
@@ -56,13 +62,13 @@ contract DeployCoopDeterminismTest is Test {
         );
         assertEq(
             canonical,
-            // Re-frozen 2026-08-30 (SETL-S4): the factory `new`s the per-model contracts, so the
-            // money-surface security fixes — reserveTreasury!=coop (H2), the pool's dedicated
-            // YEAR_KEEPER_ROLE grant (H1/M3), and PatronageLedger's no-credit-before-units (M1) —
-            // move the factory init_code, and thus its canonical CREATE2 address, deliberately, from
-            // 0x772d215d…Fed0b94 (the pre-audit staging factory). The CoopDeployer is untouched, so
-            // its frozen address above is unchanged. The fixed stack redeploys to this address.
-            0x3B88731d65F044cc43c5d4589212c0F32A8C1667,
+            // Re-frozen 2026-09-23 (solc 0.8.36): the factory init_code folds in both the
+            // factory creationCode and the CoopDeployer arg, and the 0.8.26→0.8.36 compiler bump
+            // (chain-match, see foundry.toml) moves both — so the canonical CREATE2 address moves
+            // deliberately from the stale 0x3B88731d…C1667 (0.8.26 freeze / SETL-S4 audit fixes:
+            // reserveTreasury!=coop H2, the pool's YEAR_KEEPER_ROLE grant H1/M3, PatronageLedger
+            // no-credit-before-units M1) to this 0.8.36 value. Address manifest must be regenerated.
+            0xcEa6750252d593E5a9FCD1a64C75DC1F081cA3Ff,
             "co-op factory canonical CREATE2 address drifted"
         );
     }

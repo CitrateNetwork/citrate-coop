@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: foundry-rs/foundry-toolchain@v1
-      - run: forge install foundry-rs/forge-std --no-commit
+      - run: forge install foundry-rs/forge-std   # --no-commit is the default (and removed as a flag) in forge >=1.0
       - name: Build
         run: forge build --sizes --use 0.8.36
       - name: Test (unit + fuzz + invariants)
