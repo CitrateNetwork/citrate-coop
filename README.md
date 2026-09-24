@@ -51,6 +51,5 @@ Deployment addresses/params live in `contracts/script/` and the spec docs. Chain
 - Contributing (DCO): CONTRIBUTING.md · Security: SECURITY.md · License: LICENSE
 
 ## License
-**Source-available (BUSL-1.1)** — free for personal/non-commercial use; commercial or
-hosted use requires a membership license. Converts to Apache-2.0 on the Change Date. Not
-OSI "open source." See `LICENSE`, `PATENTS.md`, `TRADEMARK.md`.
+
+Licensed under the Apache License, Version 2.0 (see [`LICENSE`](LICENSE)). This is the open-source infrastructure tier of Citrate's open-core model. The commercial application layer is source-available under BUSL-1.1. Licensor: Citrate Inc.
