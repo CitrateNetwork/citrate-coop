@@ -54,6 +54,7 @@ contract ContributionRewardPool is Auth {
     error Nothing();
     error AlreadyForfeited(); // PBA-L2-058: forfeiture is one-shot (re-forfeiting would extend vesting)
     error NotForfeited();
+    error BadReserveBps(); // PBA-L2-040 COOP-05: > 10_000 made distributable() underflow
 
     constructor(
         address salt_,
@@ -67,6 +68,7 @@ contract ContributionRewardPool is Auth {
         ledger = PatronageLedger(ledger_);
         kyc = IKYCRegistry(kyc_);
         coopTreasury = coopTreasury_;
+        if (reserveBps_ > 10_000) revert BadReserveBps();
         reserveBps = reserveBps_;
         vestWindow = vestWindow_;
     }

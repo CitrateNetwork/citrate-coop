@@ -30,6 +30,10 @@ contract CooperativeFiatRamp is Auth {
 
     IERC20 public immutable salt;
     ICoopRevenue public immutable coop;
+    /// PBA-L2-040 B-018: the hold must cover the ACH-return window but never freeze credits for good.
+    uint64 public constant MIN_HOLD = 1 days;
+    uint64 public constant MAX_HOLD = 90 days;
+
     uint64 public holdPeriod;     // e.g. 5 business days for ACH
     uint256 public rampReserve;   // wSALT absorbing chargebacks/returns
     uint256 public pendingTotal;  // wSALT owed to not-yet-released pending credits
@@ -39,15 +43,20 @@ contract CooperativeFiatRamp is Auth {
     event FiatCredited(bytes32 indexed ref, uint256 amount, uint32 usdCents, uint64 releaseAt);
     event FiatReleased(bytes32 indexed ref, uint256 amount);
     event FiatChargedBack(bytes32 indexed ref, uint256 amount);
+    event RampFundsWithdrawn(address indexed to, uint256 amount);
+    event HoldPeriodSet(uint64 holdPeriod);
 
     error UnknownOrSettled();
     error HoldNotElapsed();
     error AlreadyReleased();
     error InsufficientRampFunds();
+    error BadHoldPeriod();
+    error ZeroRecipient();
 
     constructor(address salt_, address coop_, uint64 holdPeriod_) {
         salt = IERC20(salt_);
         coop = ICoopRevenue(coop_);
+        if (holdPeriod_ < MIN_HOLD || holdPeriod_ > MAX_HOLD) revert BadHoldPeriod();
         holdPeriod = holdPeriod_;
     }
 
@@ -98,6 +107,21 @@ contract CooperativeFiatRamp is Auth {
     }
 
     function setHoldPeriod(uint64 h) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (h < MIN_HOLD || h > MAX_HOLD) revert BadHoldPeriod();
         holdPeriod = h;
+        emit HoldPeriodSet(h);
+    }
+
+    /// @notice PBA-L2-040 B-013: the ramp had no way out for wSALT once the co-op stopped taking
+    ///         revenue (after Dissolved, release() reverts forever). The admin (the custodian's
+    ///         AdminSafe) may withdraw anything NOT backing a still-pending credit: charged-back
+    ///         reserve (to refund the payer) and over-funding. Pending credits stay fully backed.
+    function withdrawRampFunds(address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (to == address(0)) revert ZeroRecipient();
+        uint256 bal = salt.balanceOf(address(this));
+        if (bal < pendingTotal || amount > bal - pendingTotal) revert InsufficientRampFunds();
+        rampReserve -= amount < rampReserve ? amount : rampReserve;
+        require(salt.transfer(to, amount), "withdraw xfer");
+        emit RampFundsWithdrawn(to, amount);
     }
 }
