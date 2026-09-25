@@ -38,6 +38,8 @@ contract ModelCooperative is Auth, ReentrancyGuard {
     error Nothing();
     error ExecFailed();
     error ExecForbidden(); // SETL-C2: execute() may not target the ledger or the SALT treasury
+    error GovernorAlreadySet(); // PBA-L2-019: setGovernor is one-shot
+    error ZeroGovernor();
 
     modifier onlyGovernor() {
         if (msg.sender != governor) revert NotGovernor();
@@ -61,7 +63,11 @@ contract ModelCooperative is Auth, ReentrancyGuard {
     }
 
     /// @dev Set once by the deployer/factory (admin), then governance owns lifecycle.
+    ///      PBA-L2-019: enforced one-shot. Without the guard DEFAULT_ADMIN could re-point the
+    ///      governor at will and drive lifecycle / admission / expulsion around the members.
     function setGovernor(address g) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (governor != address(0)) revert GovernorAlreadySet();
+        if (g == address(0)) revert ZeroGovernor();
         governor = g;
         emit GovernorSet(g);
     }
