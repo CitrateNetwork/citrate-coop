@@ -19,6 +19,10 @@ contract CitrateAdminSafe {
     mapping(address => bool) public isSigner;
     uint256 public threshold;
     uint256 public delay; // seconds
+    /// PBA-L2-039: bumped on every signer-set change. An action records the config it was proposed
+    /// under; once the signer set changes, every older action is void (no confirm/execute/cancel) and
+    /// must be re-proposed, so confirmations from removed signers can never count toward a quorum.
+    uint64 public configNonce;
 
     // --- proposals ---
     struct Action {
@@ -29,6 +33,7 @@ contract CitrateAdminSafe {
         uint32 confirmations;
         bool executed;
         bool canceled;
+        uint64 configNonce; // PBA-L2-039: the signer-set generation this action belongs to
     }
 
     Action[] private _actions;
@@ -59,6 +64,7 @@ contract CitrateAdminSafe {
     error Timelocked();
     error CallFailed();
     error Reentrancy();
+    error StaleConfig(); // PBA-L2-039: the signer set changed after this action was proposed
 
     modifier onlySigner() {
         if (!isSigner[msg.sender]) revert NotSigner();
@@ -114,7 +120,16 @@ contract CitrateAdminSafe {
     {
         id = _actions.length;
         _actions.push(
-            Action({target: target, value: value, data: data, eta: 0, confirmations: 0, executed: false, canceled: false})
+            Action({
+                target: target,
+                value: value,
+                data: data,
+                eta: 0,
+                confirmations: 0,
+                executed: false,
+                canceled: false,
+                configNonce: configNonce
+            })
         );
         emit Proposed(id, msg.sender, target, value, data);
         _confirm(id); // the proposer auto-confirms
@@ -129,6 +144,7 @@ contract CitrateAdminSafe {
         Action storage a = _actions[id];
         if (a.executed) revert AlreadyExecuted();
         if (a.canceled) revert IsCanceled();
+        if (a.configNonce != configNonce) revert StaleConfig();
         if (confirmedBy[id][msg.sender]) revert AlreadyConfirmed();
         confirmedBy[id][msg.sender] = true;
         a.confirmations += 1;
@@ -147,6 +163,7 @@ contract CitrateAdminSafe {
         Action storage a = _actions[id];
         if (a.executed) revert AlreadyExecuted();
         if (a.canceled) revert IsCanceled();
+        if (a.configNonce != configNonce) revert StaleConfig(); // signer set rotated since proposal
         if (a.eta == 0) revert NotQueued(); // threshold never reached
         if (block.timestamp < a.eta) revert Timelocked(); // delay not elapsed
         a.executed = true; // effects before interaction (CEI)
@@ -164,6 +181,7 @@ contract CitrateAdminSafe {
         Action storage a = _actions[id];
         if (a.executed) revert AlreadyExecuted();
         if (a.canceled) revert IsCanceled();
+        if (a.configNonce != configNonce) revert StaleConfig(); // already void, nothing to cancel
         if (cancelConfirmedBy[id][msg.sender]) revert AlreadyConfirmed();
         cancelConfirmedBy[id][msg.sender] = true;
         uint32 c = cancelConfirmations[id] + 1;
@@ -199,6 +217,7 @@ contract CitrateAdminSafe {
             _signers.push(a);
         }
         threshold = t;
+        configNonce += 1; // PBA-L2-039: void every action proposed under the previous signer set
         emit SignersChanged(s, t);
     }
 
