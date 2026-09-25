@@ -36,6 +36,11 @@ contract CitrateCooperativeFactory {
 
     event CooperativeCreated(bytes32 indexed modelHash, address indexed cooperative, address governor);
 
+    /// PBA-L2-018: the canonical registry is first-writer-wins. A model that already has a co-op can
+    /// never be re-pointed at another one (the prior code let anyone overwrite it with a co-op wired
+    /// to their own settler/registrar/admin).
+    error ModelAlreadyHasCooperative(bytes32 modelHash);
+
     struct Params {
         address salt;
         address kyc;
@@ -66,6 +71,7 @@ contract CitrateCooperativeFactory {
     }
 
     function createCooperative(Params calldata p) external returns (Coop memory c) {
+        if (cooperativeOf[p.modelHash] != address(0)) revert ModelAlreadyHasCooperative(p.modelHash);
         MembershipSBT sbt = new MembershipSBT(p.kyc, p.modelIds);
         PatronageLedger ledger = new PatronageLedger(p.kyc, address(sbt));
         ModelCooperative coop = new ModelCooperative(p.salt, p.kyc, address(ledger), p.modelHash);
