@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "./MembershipSBT.sol";
+import "./ModelCooperative.sol"; // selectors only (PBA-L2-017 Kind derivation)
 
 interface ICoopExec {
     function execute(address target, uint256 value, bytes calldata data) external returns (bytes memory);
@@ -73,6 +74,7 @@ contract CooperativeGovernor {
     error BadReveal();
     error AlreadyRevealed();
     error NotExecutable();
+    error KindMismatch(); // PBA-L2-017: an Approval-class action proposed as Standard
 
     constructor(address membership_, address coop_) {
         membership = MembershipSBT(membership_);
@@ -117,6 +119,10 @@ contract CooperativeGovernor {
     {
         // AB 816: only worker-members may propose; investors are approval-only.
         if (membership.memberClass(msg.sender) != MembershipSBT.MemberClass.Worker) revert NotWorker();
+        // PBA-L2-017: the Kind is derived from the call, not trusted from the proposer. An
+        // Approval-class action (merger/sale/reorg/dissolution) may never be routed as Standard.
+        // Choosing Approval for a Standard action is allowed (it is strictly harder to pass).
+        if (kind == Kind.Standard && requiredKind(target, data) == Kind.Approval) revert KindMismatch();
 
         uint64 commitDeadline = uint64(block.timestamp) + COMMIT_PERIOD;
         uint64 revealDeadline = commitDeadline + REVEAL_PERIOD;
@@ -187,6 +193,30 @@ contract CooperativeGovernor {
     }
 
     // --- views ---
+
+    /// @notice The minimum Kind a call requires (PBA-L2-017). Approval-class (AB 816: merger, sale,
+    ///         reorg, dissolution) is:
+    ///           - the co-op's own terminal lifecycle moves: beginWindDown(), dissolve(address);
+    ///           - any ownership / asset hand-off on ANY target (the model sale / merger path):
+    ///             transferOwnership(address), renounceOwnership(), and the ERC-721/ERC-20
+    ///             transferFrom / safeTransferFrom family.
+    ///         Everything else is Standard.
+    function requiredKind(address target, bytes calldata data) public view returns (Kind) {
+        if (data.length < 4) return Kind.Standard;
+        bytes4 sel = bytes4(data[:4]);
+        if (
+            target == address(coop)
+                && (sel == ModelCooperative.beginWindDown.selector || sel == ModelCooperative.dissolve.selector)
+        ) return Kind.Approval;
+        if (
+            sel == 0xf2fde38b // transferOwnership(address)
+                || sel == 0x715018a6 // renounceOwnership()
+                || sel == 0x23b872dd // transferFrom(address,address,uint256)
+                || sel == 0x42842e0e // safeTransferFrom(address,address,uint256)
+                || sel == 0xb88d4fde // safeTransferFrom(address,address,uint256,bytes)
+        ) return Kind.Approval;
+        return Kind.Standard;
+    }
 
     function proposalCount() external view returns (uint256) {
         return proposals.length;
