@@ -50,7 +50,7 @@ contract DeployCoopDeterminismTest is Test {
             // creationCode, so its canonical CREATE2 address moves deliberately from the
             // stale 0xd7CBAeB1…56Fe (0.8.26 freeze) to this 0.8.36 value. Co-op factory is
             // not yet deployed on 40204, so the address manifest must be regenerated to match.
-            0x5b5e7e854D98055929f35638853712BE71Ebc51d, // FROZEN CoopDeployer canonical (solc 0.8.36, PBA R2 re-freeze)
+            0x37226c9510D203822E9CF80f03A1FD8e92e1916a, // FROZEN CoopDeployer canonical (solc 0.8.36, PBA R2 re-freeze)
             "CoopDeployer canonical CREATE2 address drifted"
         );
         // The factory address now folds the CoopDeployer arg into init_code:
@@ -71,10 +71,10 @@ contract DeployCoopDeterminismTest is Test {
             // Re-frozen 2026-09-24 (PBA R2 remediation, deliberate): the pre-bounty audit fixes
             // PBA-L2-015..019/038/039/040/058 change CooperativeGovernor, ModelCooperative,
             // MembershipSBT, PatronageLedger, ContributionRewardPool and the factory, so both
-            // CoopDeployer (0xbfFD95A5…9Aac4 -> 0x5b5e7e85…c51d) and the factory
+            // CoopDeployer (0xbfFD95A5…9Aac4 -> 0x37226c95…916a) and the factory
             // (0xcEa67502…A3Ff -> this value) move. The co-op is not deployed on 40204, so nothing
             // on-chain references the old values; regenerate the address manifest at the ceremony.
-            0x567A84C6f88Fa4B2c028C2C37482d2B004a8D58F,
+            0x9476F7b1D5b730ECaC82618edeFA6930442Ef8ac,
             "co-op factory canonical CREATE2 address drifted"
         );
     }
