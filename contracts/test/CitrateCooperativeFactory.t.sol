@@ -70,8 +70,9 @@ contract CitrateCooperativeFactoryTest is Test {
         // SETL-H1/M3: the pool holds ONLY the dedicated year-keeper role, NOT the broad COOP_ROLE.
         assertTrue(ledger.hasRole(ledger.YEAR_KEEPER_ROLE(), c.rewardPool));
         assertFalse(ledger.hasRole(ledger.COOP_ROLE(), c.rewardPool));
-        // pool year-keeper
-        assertTrue(pool.hasRole(pool.YEAR_KEEPER_ROLE(), c.governor));
+        // pool year-keeper = the co-op, the actual caller on the governance execute path (PBA-L2-038)
+        assertTrue(pool.hasRole(pool.YEAR_KEEPER_ROLE(), c.cooperative));
+        assertFalse(pool.hasRole(pool.YEAR_KEEPER_ROLE(), c.governor));
         // membership registrar (bootstrap + governance-via-coop)
         assertTrue(sbt.hasRole(sbt.REGISTRAR_ROLE(), registrar));
         assertTrue(sbt.hasRole(sbt.REGISTRAR_ROLE(), c.cooperative));
@@ -172,7 +173,7 @@ contract CitrateCooperativeFactoryTest is Test {
 
         bytes32 s = keccak256("s");
         for (uint256 i = 0; i < 3; i++) {
-            bytes32 h = keccak256(abi.encode(CooperativeGovernor.Choice.Yes, s, ms[i]));
+            bytes32 h = gov.commitVoteHash(id, CooperativeGovernor.Choice.Yes, s, ms[i]); // PBA-L2-040 B-017 domain
             vm.prank(ms[i]);
             gov.commitVote(id, h);
         }

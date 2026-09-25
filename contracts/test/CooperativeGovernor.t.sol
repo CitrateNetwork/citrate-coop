@@ -62,7 +62,7 @@ contract CooperativeGovernorTest is Test {
     }
 
     function _commit(uint256 id, address voter, CooperativeGovernor.Choice choice, bytes32 salt) internal {
-        bytes32 h = keccak256(abi.encode(choice, salt, voter));
+        bytes32 h = gov.commitVoteHash(id, choice, salt, voter); // PBA-L2-040 B-017 domain
         vm.prank(voter);
         gov.commitVote(id, h);
     }
@@ -113,7 +113,7 @@ contract CooperativeGovernorTest is Test {
         uint256 id = _propose();
         bytes32 s = keccak256("s");
         // alice has delegated → cannot commit directly
-        bytes32 h = keccak256(abi.encode(CooperativeGovernor.Choice.Yes, s, alice));
+        bytes32 h = gov.commitVoteHash(id, CooperativeGovernor.Choice.Yes, s, alice);
         vm.prank(alice);
         vm.expectRevert(CooperativeGovernor.HasDelegated.selector);
         gov.commitVote(id, h);
@@ -145,7 +145,7 @@ contract CooperativeGovernorTest is Test {
 
     function test_investor_cannot_vote_standard() public {
         uint256 id = _propose(); // Standard kind
-        bytes32 h = keccak256(abi.encode(CooperativeGovernor.Choice.Yes, bytes32("s"), dave));
+        bytes32 h = gov.commitVoteHash(id, CooperativeGovernor.Choice.Yes, bytes32("s"), dave);
         vm.prank(dave);
         vm.expectRevert(CooperativeGovernor.InvestorCannotVoteStandard.selector);
         gov.commitVote(id, h);
