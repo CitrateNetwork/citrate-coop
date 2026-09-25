@@ -254,8 +254,9 @@ contract CooperativeGovernor {
     ///         reorg, dissolution) is:
     ///           - the co-op's own terminal lifecycle moves: beginWindDown(), dissolve(address);
     ///           - any ownership / asset hand-off on ANY target (the model sale / merger path):
-    ///             transferOwnership(address), renounceOwnership(), and the ERC-721/ERC-20
-    ///             transferFrom / safeTransferFrom family.
+    ///             transferOwnership(address), renounceOwnership(), and the ERC-20 / ERC-721 /
+    ///             ERC-1155 transfer, transferFrom, safeTransferFrom, safeBatchTransferFrom, approve
+    ///             and setApprovalForAll family.
     ///         Everything else is Standard.
     function requiredKind(address target, bytes calldata data) public view returns (Kind) {
         if (data.length < 4) return Kind.Standard;
@@ -270,6 +271,13 @@ contract CooperativeGovernor {
                 || sel == 0x23b872dd // transferFrom(address,address,uint256)
                 || sel == 0x42842e0e // safeTransferFrom(address,address,uint256)
                 || sel == 0xb88d4fde // safeTransferFrom(address,address,uint256,bytes)
+                // PBA-L2-017 (verifier follow-up): approvals and direct transfers hand an asset off
+                // just as surely (approve a buyer, who then pulls it).
+                || sel == 0x095ea7b3 // approve(address,uint256)            ERC-20 / ERC-721
+                || sel == 0xa22cb465 // setApprovalForAll(address,bool)     ERC-721 / ERC-1155
+                || sel == 0xa9059cbb // transfer(address,uint256)           ERC-20
+                || sel == 0xf242432a // safeTransferFrom(address,address,uint256,uint256,bytes)      ERC-1155
+                || sel == 0x2eb2c2d6 // safeBatchTransferFrom(address,address,uint256[],uint256[],bytes) ERC-1155
         ) return Kind.Approval;
         return Kind.Standard;
     }

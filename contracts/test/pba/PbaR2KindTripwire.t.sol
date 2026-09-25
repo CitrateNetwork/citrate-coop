@@ -54,8 +54,11 @@ contract PbaR2KindTripwireTest is PbaR2Base {
 
     /// TRIPWIRE: ownership / asset hand-off selectors are Approval-class on ANY target.
     function testFuzz_PBA_L2_017_ownership_selectors_any_target(address tgt, bytes32 tail, uint8 which) public view {
-        bytes4[5] memory sels = [bytes4(0xf2fde38b), 0x715018a6, 0x23b872dd, 0x42842e0e, 0xb88d4fde];
-        bytes memory data = abi.encodePacked(sels[which % 5], tail);
+        bytes4[10] memory sels = [
+            bytes4(0xf2fde38b), 0x715018a6, 0x23b872dd, 0x42842e0e, 0xb88d4fde, // ownership + ERC-721 transfers
+            0x095ea7b3, 0xa22cb465, 0xa9059cbb, 0xf242432a, 0x2eb2c2d6          // approvals, ERC-20, ERC-1155
+        ];
+        bytes memory data = abi.encodePacked(sels[which % 10], tail);
         assertEq(uint8(gov.requiredKind(tgt, data)), uint8(CooperativeGovernor.Kind.Approval));
     }
 }
