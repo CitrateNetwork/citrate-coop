@@ -173,7 +173,7 @@ contract CitrateCooperativeFactoryTest is Test {
 
         bytes32 s = keccak256("s");
         for (uint256 i = 0; i < 3; i++) {
-            bytes32 h = keccak256(abi.encode(CooperativeGovernor.Choice.Yes, s, ms[i]));
+            bytes32 h = gov.commitVoteHash(id, CooperativeGovernor.Choice.Yes, s, ms[i]); // PBA-L2-040 B-017 domain
             vm.prank(ms[i]);
             gov.commitVote(id, h);
         }

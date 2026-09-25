@@ -102,7 +102,13 @@ abstract contract PbaR2Base is Test {
         virtual
         returns (bytes32)
     {
-        id; // pre-PBA-L2-040(B-017) ballot format: no proposal/contract/chain domain
+        // PBA-L2-040 B-017: the governor's domain-separated helper. Resolved by a low-level call so
+        // the harness also builds against the pre-fix governor (legacy, domain-free ballot) for the
+        // mutation/revert checks; production code only ever has the domain-separated form.
+        (bool ok, bytes memory ret) = address(gov).staticcall(
+            abi.encodeWithSignature("commitVoteHash(uint256,uint8,bytes32,address)", id, uint8(choice), s, voter)
+        );
+        if (ok && ret.length == 32) return abi.decode(ret, (bytes32));
         return keccak256(abi.encode(choice, s, voter));
     }
 

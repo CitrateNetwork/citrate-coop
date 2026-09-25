@@ -93,7 +93,9 @@ contract PbaR2KindBindingTest is PbaR2Base {
     function test_PBA_L2_017_standard_actions_still_standard() public {
         (bool ok,) = _tryPropose(address(coop), abi.encodeWithSelector(ModelCooperative.activate.selector), CooperativeGovernor.Kind.Standard);
         assertTrue(ok);
-        (ok,) = _tryPropose(address(target), _setValueCall(1), CooperativeGovernor.Kind.Standard);
+        // a different proposer (one open proposal per proposer, PBA-L2-040 B-015)
+        vm.prank(workers[1]);
+        (ok,) = address(gov).call(abi.encodeWithSelector(CooperativeGovernor.propose.selector, address(target), uint256(0), _setValueCall(1), CooperativeGovernor.Kind.Standard));
         assertTrue(ok);
     }
 }

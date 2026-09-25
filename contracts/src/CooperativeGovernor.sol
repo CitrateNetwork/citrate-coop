@@ -38,6 +38,7 @@ contract CooperativeGovernor {
         uint64 executeAfter;
         uint64 expiresAt;   // PBA-L2-016: last second the proposal may execute
         uint256 electorate; // PBA-L2-016: memberCount snapshotted at propose (the quorum denominator)
+        uint256 voterCutoff; // PBA-L2-040 B-014: only token ids below this (seated before propose) vote
         uint256 yes;
         uint256 no;
         bytes32 randaoSeed; // prevrandao at creation (for optional sortition)
@@ -47,7 +48,9 @@ contract CooperativeGovernor {
     MembershipSBT public immutable membership;
     ICoopExec public immutable coop;
 
-    Proposal[] public proposals;
+    /// @dev Internal (read it with getProposal): the auto-generated getter for this many fields hits
+    ///      "stack too deep" under the pinned legacy pipeline (PBA-L2-016/040 added snapshot fields).
+    Proposal[] internal proposals;
     mapping(uint256 => mapping(address => bytes32)) public commitment; // proposal => voter => hash
     mapping(uint256 => mapping(address => bool)) public revealed;
 
@@ -55,6 +58,7 @@ contract CooperativeGovernor {
     mapping(address => address) public delegateOf;   // member => representative (self if unset)
     mapping(address => uint256) public delegatorCount;
     uint64 public lastVotingDeadline;                // no delegation changes while a vote is open
+    mapping(address => uint64) public openProposalUntil; // PBA-L2-040 B-015: proposer's open ballot
 
     event ProposalCreated(uint256 indexed id, address indexed proposer, Kind kind, address target);
     event Delegated(address indexed member, address indexed rep);
@@ -76,6 +80,9 @@ contract CooperativeGovernor {
     error NotExecutable();
     error RepresentativeHasDelegators(); // PBA-L2-015: a rep carrying delegators may not delegate onward
     error KindMismatch(); // PBA-L2-017: an Approval-class action proposed as Standard
+    error ProposalPending();   // PBA-L2-040 B-015: one open proposal per proposer
+    error ClassMismatch();     // PBA-L2-040 B-016: delegation stays within the member class
+    error NotMembership();     // PBA-L2-040 COOP-02: only the MembershipSBT calls the expel hook
 
     constructor(address membership_, address coop_) {
         membership = MembershipSBT(membership_);
@@ -84,17 +91,34 @@ contract CooperativeGovernor {
 
     // --- delegation ---
 
-    function _rep(address m) internal view returns (address) {
+    /// @dev PBA-L2-040 (COOP-02): a member counts as delegated only while their rep holds a seat. The
+    ///      delegators of an expelled rep get their own vote back instead of being stranded.
+    function _isDelegated(address m) internal view returns (bool) {
         address d = delegateOf[m];
-        return d == address(0) ? m : d;
+        return d != address(0) && membership.isMember(d);
+    }
+
+    /// @notice PBA-L2-040 (COOP-02): MembershipSBT.expel hook. Clears the expelled member's own
+    ///         delegation so their vote stops counting in the rep's weight. Never reverts for a
+    ///         non-delegating member, so it can never block an expulsion.
+    function onMemberExpelled(address member) external {
+        if (msg.sender != address(membership)) revert NotMembership();
+        address cur = delegateOf[member];
+        if (cur != address(0)) {
+            delegatorCount[cur] -= 1;
+            delete delegateOf[member];
+            emit Undelegated(member);
+        }
     }
 
     function delegate(address rep) external {
         if (!membership.isMember(msg.sender)) revert NotMember();
         if (!membership.isMember(rep) || rep == msg.sender) revert NotMember();
         if (block.timestamp <= lastVotingDeadline) revert DelegationLocked();
+        // PBA-L2-040 B-016: same class only (a worker's weight must stay in the Standard vote)
+        if (membership.memberClass(rep) != membership.memberClass(msg.sender)) revert ClassMismatch();
         // flat delegation: a rep must be an active voter (not itself delegated)
-        if (delegateOf[rep] != address(0)) revert HasDelegated();
+        if (_isDelegated(rep)) revert HasDelegated();
         // PBA-L2-015: ...and a member who IS a rep (carries delegators) may not delegate onward:
         // they could no longer vote and their delegators were not re-pointed, so every vote parked
         // on them was silently lost. Delegators must leave first (undelegate) to keep it flat.
@@ -128,6 +152,9 @@ contract CooperativeGovernor {
         // Approval-class action (merger/sale/reorg/dissolution) may never be routed as Standard.
         // Choosing Approval for a Standard action is allowed (it is strictly harder to pass).
         if (kind == Kind.Standard && requiredKind(target, data) == Kind.Approval) revert KindMismatch();
+        // PBA-L2-040 B-015: one open proposal per proposer; spam kept pushing lastVotingDeadline out
+        // and froze delegation for everyone.
+        if (block.timestamp <= openProposalUntil[msg.sender]) revert ProposalPending();
 
         uint64 commitDeadline = uint64(block.timestamp) + COMMIT_PERIOD;
         uint64 revealDeadline = commitDeadline + REVEAL_PERIOD;
@@ -145,12 +172,14 @@ contract CooperativeGovernor {
             executeAfter: executeAfter,
             expiresAt: executeAfter + EXECUTION_WINDOW,
             electorate: membership.memberCount(),
+            voterCutoff: membership.nextTokenId(),
             yes: 0,
             no: 0,
             randaoSeed: blockhash(block.number - 1) ^ bytes32(block.prevrandao),
             executed: false
         }));
         if (revealDeadline > lastVotingDeadline) lastVotingDeadline = revealDeadline;
+        openProposalUntil[msg.sender] = revealDeadline;
         emit ProposalCreated(id, msg.sender, kind, target);
     }
 
@@ -159,20 +188,23 @@ contract CooperativeGovernor {
     function commitVote(uint256 id, bytes32 hash) external {
         Proposal storage p = proposals[id];
         if (block.timestamp > p.commitDeadline) revert NotCommitPhase();
-        _requireEligible(msg.sender, p.kind);
-        if (delegateOf[msg.sender] != address(0)) revert HasDelegated(); // delegators don't vote directly
+        _requireEligible(msg.sender, p);
+        if (_isDelegated(msg.sender)) revert HasDelegated(); // delegators don't vote directly
         if (commitment[id][msg.sender] != bytes32(0)) revert AlreadyCommitted();
         commitment[id][msg.sender] = hash;
         emit VoteCommitted(id, msg.sender);
     }
 
-    /// @notice Reveal a previously committed ballot. hash = keccak256(choice, salt, voter).
+    /// @notice Reveal a previously committed ballot. hash = commitVoteHash(id, choice, salt, voter).
     function revealVote(uint256 id, Choice choice, bytes32 salt) external {
         Proposal storage p = proposals[id];
         if (block.timestamp <= p.commitDeadline || block.timestamp > p.revealDeadline) revert NotRevealPhase();
+        // PBA-L2-040 (COOP-02): eligibility is re-checked at reveal; a voter expelled after committing
+        // no longer holds a seat and cannot cast it.
+        _requireEligible(msg.sender, p);
         if (revealed[id][msg.sender]) revert AlreadyRevealed();
         bytes32 h = commitment[id][msg.sender];
-        if (h == bytes32(0) || h != keccak256(abi.encode(choice, salt, msg.sender))) revert BadReveal();
+        if (h == bytes32(0) || h != commitVoteHash(id, choice, salt, msg.sender)) revert BadReveal();
 
         revealed[id][msg.sender] = true;
         uint256 weight = 1 + delegatorCount[msg.sender]; // self + delegated votes
@@ -181,8 +213,11 @@ contract CooperativeGovernor {
         emit VoteRevealed(id, msg.sender, choice, weight);
     }
 
-    function commitVoteHash(Choice choice, bytes32 salt, address voter) external pure returns (bytes32) {
-        return keccak256(abi.encode(choice, salt, voter));
+    /// @notice The ballot commitment. PBA-L2-040 B-017: domain-separated by chain, governor and
+    ///         proposal id, so a commitment can never be replayed onto another proposal, governor or
+    ///         chain.
+    function commitVoteHash(uint256 id, Choice choice, bytes32 salt, address voter) public view returns (bytes32) {
+        return keccak256(abi.encode(block.chainid, address(this), id, choice, salt, voter));
     }
 
     // --- execution ---
@@ -223,6 +258,10 @@ contract CooperativeGovernor {
         return Kind.Standard;
     }
 
+    function getProposal(uint256 id) external view returns (Proposal memory) {
+        return proposals[id];
+    }
+
     function proposalCount() external view returns (uint256) {
         return proposals.length;
     }
@@ -246,11 +285,15 @@ contract CooperativeGovernor {
         return p.yes > p.no;                                        // simple majority
     }
 
-    function _requireEligible(address voter, Kind kind) internal view {
+    function _requireEligible(address voter, Proposal storage p) internal view {
+        // PBA-L2-040 B-014: only members seated before the proposal was created may vote on it, so the
+        // registrar cannot swing an open ballot by admitting voters mid-vote.
+        uint256 tokenId = membership.tokenOf(voter);
+        if (tokenId == 0 || tokenId >= p.voterCutoff) revert NotMember();
         MembershipSBT.MemberClass c = membership.memberClass(voter);
         if (c == MembershipSBT.MemberClass.Worker) return;
         if (c == MembershipSBT.MemberClass.Investor) {
-            if (kind != Kind.Approval) revert InvestorCannotVoteStandard();
+            if (p.kind != Kind.Approval) revert InvestorCannotVoteStandard();
             return;
         }
         revert NotMember();

@@ -105,6 +105,7 @@ contract CitrateCooperativeFactory {
 
         sbt.grantRole(sbt.REGISTRAR_ROLE(), p.registrar);     // bootstrap onboarding
         sbt.grantRole(sbt.REGISTRAR_ROLE(), address(coop));   // governance admit/expel via execute
+        sbt.setGovernanceHook(govAddr);                       // PBA-L2-040 COOP-02: expel clears delegation
 
         // --- hand admin to the owner, renounce the factory's admin ---
         _handAdmin(sbt, p.admin);
