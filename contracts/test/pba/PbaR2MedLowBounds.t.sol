@@ -87,6 +87,25 @@ contract PbaR2BoundsMedLowTest is PbaR2Base {
         assertFalse(_try(address(this), address(ramp), abi.encodeWithSignature("withdrawRampFunds(address,uint256)", address(0xF1A7), uint256(501))));
     }
 
+    // B-013 (verifier NEW-4): a withdrawal of charged-back reserve must release it from rampReserve,
+    // or every later creditFromFiat is over-constrained by a reserve that no longer exists.
+    function test_PBA_L2_040_B013_credit_works_after_reserve_withdrawal() public {
+        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days);
+        address attestor = address(0xA77E);
+        ramp.grantRole(ramp.ATTESTOR_ROLE(), attestor);
+        salt.mint(address(ramp), 1_000);
+        vm.prank(attestor);
+        ramp.creditFromFiat(keccak256("ref"), 1_000, 100);
+        vm.prank(attestor);
+        ramp.chargeback(keccak256("ref"));
+        assertTrue(_try(address(this), address(ramp), abi.encodeWithSignature("withdrawRampFunds(address,uint256)", address(0xF1A7), uint256(1_000))));
+        assertEq(ramp.rampReserve(), 0);
+        salt.mint(address(ramp), 500); // the custodian funds a new payment
+        vm.prank(attestor);
+        ramp.creditFromFiat(keccak256("ref2"), 500, 50);
+        assertEq(ramp.pendingTotal(), 500);
+    }
+
     // B-025: Auth had no last-admin guard; revoking the only DEFAULT_ADMIN bricked administration.
     function test_PBA_L2_040_B025_last_admin_cannot_be_revoked() public {
         assertFalse(_try(admin, address(ledger), abi.encodeWithSelector(Auth.revokeRole.selector, bytes32(0), admin)), "last admin revoked");
@@ -115,11 +134,15 @@ contract PbaR2BoundsTripwireTest is PbaR2Base {
         CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days);
         (bool ok,) = address(ramp).call(abi.encodeWithSelector(CooperativeFiatRamp.setHoldPeriod.selector, h));
         assertEq(ok, h >= 1 days && h <= 90 days);
-        try new ContributionRewardPool(address(salt), address(ledger), address(kyc), reserveTreasury, bps, 365 days) returns (ContributionRewardPool p) {
-            assertLe(bps, 10_000);
+        // forge >= 1.8 routes `new` in tests through VM::deployCode, so a constructor revert cannot be
+        // caught with try/catch. Branch on the input and assert each outcome explicitly instead.
+        if (bps > 10_000) {
+            vm.expectRevert(bytes4(keccak256("BadReserveBps()")));
+            new ContributionRewardPool(address(salt), address(ledger), address(kyc), reserveTreasury, bps, 365 days);
+        } else {
+            ContributionRewardPool p =
+                new ContributionRewardPool(address(salt), address(ledger), address(kyc), reserveTreasury, bps, 365 days);
             assertLe(p.distributable(), p.ANNUAL());
-        } catch {
-            assertGt(bps, 10_000);
         }
     }
 
