@@ -22,6 +22,9 @@ contract CooperativeGovernor {
     uint64 public constant REVEAL_PERIOD = 1 days;
     uint64 public constant TIMELOCK = 1 days;
     uint16 public constant QUORUM_BPS = 3300; // 33% of members must vote
+    /// PBA-L2-016: a passed proposal is executable only in [executeAfter, executeAfter + EXECUTION_WINDOW].
+    /// After that it is expired and must be re-proposed and re-voted; a vote is never a standing licence.
+    uint64 public constant EXECUTION_WINDOW = 7 days;
 
     struct Proposal {
         address proposer;
@@ -32,6 +35,8 @@ contract CooperativeGovernor {
         uint64 commitDeadline;
         uint64 revealDeadline;
         uint64 executeAfter;
+        uint64 expiresAt;   // PBA-L2-016: last second the proposal may execute
+        uint256 electorate; // PBA-L2-016: memberCount snapshotted at propose (the quorum denominator)
         uint256 yes;
         uint256 no;
         bytes32 randaoSeed; // prevrandao at creation (for optional sortition)
@@ -127,6 +132,8 @@ contract CooperativeGovernor {
             commitDeadline: commitDeadline,
             revealDeadline: revealDeadline,
             executeAfter: executeAfter,
+            expiresAt: executeAfter + EXECUTION_WINDOW,
+            electorate: membership.memberCount(),
             yes: 0,
             no: 0,
             randaoSeed: blockhash(block.number - 1) ^ bytes32(block.prevrandao),
@@ -171,7 +178,9 @@ contract CooperativeGovernor {
 
     function execute(uint256 id) external returns (bytes memory) {
         Proposal storage p = proposals[id];
-        if (p.executed || block.timestamp < p.executeAfter || !_passed(p)) revert NotExecutable();
+        if (p.executed || block.timestamp < p.executeAfter || block.timestamp > p.expiresAt || !_passed(p)) {
+            revert NotExecutable();
+        }
         p.executed = true;
         emit ProposalExecuted(id);
         return coop.execute(p.target, p.value, p.data);
@@ -191,9 +200,12 @@ contract CooperativeGovernor {
         return _passed(proposals[id]);
     }
 
+    /// @dev PBA-L2-016: the quorum denominator is the electorate snapshotted at propose, never the live
+    ///      memberCount. Reading it live let an expulsion (or admission) after the vote flip the
+    ///      outcome of a closed ballot.
     function _passed(Proposal storage p) internal view returns (bool) {
         uint256 total = p.yes + p.no;
-        uint256 quorum = (membership.memberCount() * QUORUM_BPS + 9_999) / 10_000;
+        uint256 quorum = (p.electorate * QUORUM_BPS + 9_999) / 10_000;
         if (total < quorum) return false;
         if (p.kind == Kind.Approval) return p.yes * 3 >= total * 2; // 2/3 supermajority
         return p.yes > p.no;                                        // simple majority
