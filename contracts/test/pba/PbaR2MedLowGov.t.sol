@@ -89,6 +89,17 @@ contract PbaR2GovernanceMedLowTest is PbaR2Base {
         assertEq(gov.delegatorCount(investors[0]), 0);
     }
 
+    // B-017: a commitment made for one proposal cannot be replayed onto another (id in the domain).
+    function test_PBA_L2_040_B017_ballot_bound_to_proposal_id() public {
+        uint256 id0 = _propose(workers[0], address(target), _setValueCall(1), CooperativeGovernor.Kind.Standard);
+        uint256 id1 = _propose(workers[1], address(target), _setValueCall(2), CooperativeGovernor.Kind.Standard);
+        bytes32 forId0 = _ballot(id0, CooperativeGovernor.Choice.Yes, BALLOT_SALT, workers[2]);
+        vm.prank(workers[2]);
+        gov.commitVote(id1, forId0); // replayed onto proposal 1
+        vm.warp(_commitDeadline(id1) + 1);
+        assertFalse(_try(workers[2], address(gov), abi.encodeWithSelector(CooperativeGovernor.revealVote.selector, id1, CooperativeGovernor.Choice.Yes, BALLOT_SALT)), "cross-proposal ballot replay accepted");
+    }
+
     // B-017: the ballot hash must carry the proposal/contract/chain domain; a domain-free
     // commitment (replayable across proposals, governors, chains) must not reveal.
     function test_PBA_L2_040_B017_domain_free_ballot_rejected() public {

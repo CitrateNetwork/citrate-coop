@@ -68,6 +68,18 @@ contract PbaR2AdminSafeTest is Test {
         assertEq(sink.hits(), 0);
     }
 
+    /// A void (stale-config) action cannot be "cancelled" either: cancel reverts StaleConfig, so no
+    /// misleading Canceled event or cancel-confirmation state is ever recorded for it.
+    function test_PBA_L2_039_cancel_on_stale_action_reverts() public {
+        vm.prank(X);
+        uint256 evil = safe.propose(address(sink), 0, abi.encodeWithSelector(PbaR2Sink.hit.selector));
+        _rotateOutX();
+        vm.prank(A);
+        vm.expectRevert(bytes4(keccak256("StaleConfig()")));
+        safe.cancel(evil);
+        assertEq(safe.cancelConfirmations(evil), 0);
+    }
+
     /// Normal operation after a rotation is unaffected: a fresh proposal under the new set works.
     function test_PBA_L2_039_new_config_actions_work() public {
         _rotateOutX();
