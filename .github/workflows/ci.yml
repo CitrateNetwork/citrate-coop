@@ -16,8 +16,8 @@ jobs:
     # remains the always-on PR gate. Remove this `if:` to make it merge-blocking.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with: { distribution: temurin, java-version: "17" }
       - name: TLC model-check all four coop specs
         run: ./scripts/run-tlc.sh   # fetches tla2tools.jar; -deadlock; fails on any invariant violation
@@ -26,8 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: contracts } }
     steps:
-      - uses: actions/checkout@v4
-      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1
       - run: forge install foundry-rs/forge-std   # --no-commit is the default (and removed as a flag) in forge >=1.0
       - name: Build
         run: forge build --sizes --use 0.8.36
