@@ -98,7 +98,10 @@ contract PbaR2BoundsMedLowTest is PbaR2Base {
         ramp.creditFromFiat(keccak256("ref"), 1_000, 100);
         vm.prank(attestor);
         ramp.chargeback(keccak256("ref"));
-        assertTrue(_try(address(this), address(ramp), abi.encodeWithSignature("withdrawRampFunds(address,uint256)", address(0xF1A7), uint256(1_000))));
+        // partial refund first: the reserve shrinks by exactly the amount withdrawn
+        assertTrue(_try(address(this), address(ramp), abi.encodeWithSignature("withdrawRampFunds(address,uint256)", address(0xF1A7), uint256(400))));
+        assertEq(ramp.rampReserve(), 600);
+        assertTrue(_try(address(this), address(ramp), abi.encodeWithSignature("withdrawRampFunds(address,uint256)", address(0xF1A7), uint256(600))));
         assertEq(ramp.rampReserve(), 0);
         salt.mint(address(ramp), 500); // the custodian funds a new payment
         vm.prank(attestor);

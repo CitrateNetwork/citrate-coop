@@ -82,6 +82,21 @@ contract PbaR2DelegationTest is PbaR2Base {
         assertEq(gov.delegateOf(R), X);
     }
 
+    /// A stale delegator clearing its dead pointer must not touch the readmitted rep's LIVE count
+    /// (otherwise a live delegator's vote is silently dropped from the rep's weight).
+    function test_PBA_L2_015_stale_undelegate_keeps_readmitted_rep_count() public {
+        address R = workers[1];
+        address X = workers[2];
+        address W = workers[3];
+        vm.prank(R); gov.delegate(X);
+        _expel(X);
+        _admit(X, MembershipSBT.MemberClass.Worker);
+        vm.prank(W); gov.delegate(X);           // live delegation to X's new seat
+        assertEq(gov.delegatorCount(X), 1);
+        vm.prank(R); gov.undelegate();          // R's pointer to X is dead
+        assertEq(gov.delegatorCount(X), 1, "stale undelegate stole a live delegator's weight");
+    }
+
     /// Verifier NEW-2: only the MembershipSBT may call the expel hook. Unguarded, anyone could strip any
     /// member's delegation (and zero a rep's weight) mid-vote.
     function test_PBA_L2_040_expel_hook_is_membership_only() public {
