@@ -74,6 +74,7 @@ contract CooperativeGovernor {
     error BadReveal();
     error AlreadyRevealed();
     error NotExecutable();
+    error RepresentativeHasDelegators(); // PBA-L2-015: a rep carrying delegators may not delegate onward
     error KindMismatch(); // PBA-L2-017: an Approval-class action proposed as Standard
 
     constructor(address membership_, address coop_) {
@@ -94,6 +95,10 @@ contract CooperativeGovernor {
         if (block.timestamp <= lastVotingDeadline) revert DelegationLocked();
         // flat delegation: a rep must be an active voter (not itself delegated)
         if (delegateOf[rep] != address(0)) revert HasDelegated();
+        // PBA-L2-015: ...and a member who IS a rep (carries delegators) may not delegate onward:
+        // they could no longer vote and their delegators were not re-pointed, so every vote parked
+        // on them was silently lost. Delegators must leave first (undelegate) to keep it flat.
+        if (delegatorCount[msg.sender] != 0) revert RepresentativeHasDelegators();
         address cur = delegateOf[msg.sender];
         if (cur != address(0)) delegatorCount[cur] -= 1;
         delegateOf[msg.sender] = rep;
