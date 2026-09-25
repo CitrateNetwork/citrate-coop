@@ -116,6 +116,10 @@ contract ContributionRewardPool is Auth {
         if (f == 0) revert NotForfeited();
         for (uint256 y = 0; y < closedCohorts; y++) {
             if (forfeitSettled[y][member]) continue;
+            // A cohort the pool never closed (ledger year advanced outside the pool by an admin) was
+            // never added to allocatedTotal; releasing its "grant" would understate the obligation and
+            // let the sweep reach owed SALT. Such a cohort is not claimable anyway (claim needs closedAt).
+            if (yearClosedAt[y] == 0) continue;
             forfeitSettled[y][member] = true;
             uint256 grant = grantOf(y, member);
             uint256 unvested = grant - _vestedAt(y, grant, f);

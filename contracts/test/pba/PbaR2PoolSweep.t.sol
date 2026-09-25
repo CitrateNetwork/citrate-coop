@@ -78,6 +78,25 @@ contract PbaR2PoolSweepTest is PbaR2Base {
         assertEq(pool.claimCRP(), grant / 4); // already-vested stays claimable
     }
 
+    /// Verifier nit: a cohort the pool never closed (the ledger year advanced outside the pool by an
+    /// admin) was never added to allocatedTotal, so releaseForfeited must not release its "grant";
+    /// otherwise the obligation is understated and the sweep can reach SALT members are owed.
+    function test_PBA_L2_058_release_skips_unclosed_cohort() public {
+        _patronage(keccak256("r0"), workers[1], 100);        // year-0 patronage
+        bytes32 ledgerKeeper = ledger.YEAR_KEEPER_ROLE();
+        vm.prank(admin);
+        ledger.grantRole(ledgerKeeper, address(this));
+        ledger.advanceYear();                                 // year 0 skipped by the pool (never closed)
+        _patronage(keccak256("r1"), workers[0], 100);        // year-1 patronage, not the forfeited member
+        _close();                                             // pool closes year 1 -> closedCohorts == 2
+        assertEq(pool.yearClosedAt(0), 0);
+        assertTrue(_asCoop(abi.encodeWithSelector(ContributionRewardPool.forfeit.selector, workers[1])));
+        uint256 before = pool.outstandingObligation();
+        assertTrue(_release(workers[1]));
+        assertEq(pool.forfeitReleased(), 0, "released a grant from a cohort the pool never closed");
+        assertEq(pool.outstandingObligation(), before);
+    }
+
     /// Forfeiture is one-shot: a second forfeit must not restart (extend) vesting.
     function test_PBA_L2_058_forfeit_is_one_shot() public {
         assertTrue(_asCoop(abi.encodeWithSelector(ContributionRewardPool.forfeit.selector, workers[1])));
