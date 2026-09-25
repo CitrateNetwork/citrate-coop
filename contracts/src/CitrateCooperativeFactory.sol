@@ -11,7 +11,7 @@ import "./CoopDeployer.sol";
 /// @title CitrateCooperativeFactory — deploys + wires one co-op per model (RFC-CIT-COOP-0001)
 /// @notice Deploys the five contracts and wires the roles so the system is governance-ready:
 ///         membership ← registrar; ledger ← settler(coordinator) + COOP_ROLE(coop, pool);
-///         coop ← governor; pool ← year-keeper(governor); coop ← REGISTRAR on membership (so
+///         coop ← governor; pool ← year-keeper(coop, the governance caller); coop ← REGISTRAR on membership (so
 ///         governance can admit/expel via execute). Hands DEFAULT_ADMIN to `admin` and renounces.
 /// @dev Funding the 50M CRP is a separate treasury/governance action (not done here).
 /// @dev EIP-170: the ContributionRewardPool + CooperativeGovernor creationCode is off-loaded to
@@ -98,7 +98,10 @@ contract CitrateCooperativeFactory {
         // broad COOP_ROLE — least-privilege, and there is no bookkeeping-skipping year-advance path.
         ledger.grantRole(ledger.YEAR_KEEPER_ROLE(), poolAddr);
 
-        pool.grantRole(pool.YEAR_KEEPER_ROLE(), govAddr);
+        // PBA-L2-038: the year-keeper is the CO-OP, not the governor. The governor's only outbound
+        // call is coop.execute, so on the governance path the pool sees msg.sender == coop; a role on
+        // the governor was unreachable and no cohort could ever be closed (or grant forfeited).
+        pool.grantRole(pool.YEAR_KEEPER_ROLE(), address(coop));
 
         sbt.grantRole(sbt.REGISTRAR_ROLE(), p.registrar);     // bootstrap onboarding
         sbt.grantRole(sbt.REGISTRAR_ROLE(), address(coop));   // governance admit/expel via execute

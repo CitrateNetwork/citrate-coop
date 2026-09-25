@@ -13,7 +13,7 @@ import "./PatronageLedger.sol";
 ///         No founder equity (ADR-0004). The pool is the sole year-keeper of the ledger.
 /// @dev Formal: specs/tla/coop/ContributionRewardPool.tla. Feature: features/coop_reward_pool.feature.
 contract ContributionRewardPool is Auth {
-    bytes32 public constant YEAR_KEEPER_ROLE = keccak256("YEAR_KEEPER_ROLE"); // governor
+    bytes32 public constant YEAR_KEEPER_ROLE = keccak256("YEAR_KEEPER_ROLE"); // the co-op (governance via execute), PBA-L2-038
 
     uint256 public constant ANNUAL = 10_000_000 ether; // 10M SALT
     uint8 public constant YEARS = 5;                    // 50M total
