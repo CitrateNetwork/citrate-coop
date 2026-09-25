@@ -57,6 +57,10 @@ contract CooperativeGovernor {
     // delegation (liquid democracy)
     mapping(address => address) public delegateOf;   // member => representative (self if unset)
     mapping(address => uint256) public delegatorCount;
+    /// PBA-L2-015/040: the rep's MembershipSBT token id at delegation time. A delegation is live only
+    /// while the rep still holds THAT seat, so an expelled-and-readmitted rep (new token id at the same
+    /// address) can never revive a stale delegation and re-form a chain.
+    mapping(address => uint256) public delegateTokenOf;
     uint64 public lastVotingDeadline;                // no delegation changes while a vote is open
     mapping(address => uint64) public openProposalUntil; // PBA-L2-040 B-015: proposer's open ballot
 
@@ -91,24 +95,41 @@ contract CooperativeGovernor {
 
     // --- delegation ---
 
-    /// @dev PBA-L2-040 (COOP-02): a member counts as delegated only while their rep holds a seat. The
-    ///      delegators of an expelled rep get their own vote back instead of being stranded.
-    function _isDelegated(address m) internal view returns (bool) {
+    /// @dev A member counts as delegated only while their rep holds the SAME seat they delegated to
+    ///      (PBA-L2-040 COOP-02 dormancy on expel, bound to the token id per PBA-L2-015: an expelled rep
+    ///      readmitted at the same address has a new token id, so the old delegation stays dead).
+    function _liveRep(address m) internal view returns (address) {
         address d = delegateOf[m];
-        return d != address(0) && membership.isMember(d);
+        if (d == address(0)) return address(0);
+        uint256 t = membership.tokenOf(d);
+        return (t != 0 && t == delegateTokenOf[m]) ? d : address(0);
+    }
+
+    function _isDelegated(address m) internal view returns (bool) {
+        return _liveRep(m) != address(0);
+    }
+
+    /// @dev Drop m's delegation (live or stale). Only a LIVE delegation is still counted in the rep's
+    ///      delegatorCount (an expelled rep's count is zeroed on expel), so only that one is decremented.
+    function _clearDelegation(address m) internal {
+        address cur = delegateOf[m];
+        if (cur == address(0)) return;
+        if (_liveRep(m) != address(0)) delegatorCount[cur] -= 1;
+        delete delegateOf[m];
+        delete delegateTokenOf[m];
+        emit Undelegated(m);
     }
 
     /// @notice PBA-L2-040 (COOP-02): MembershipSBT.expel hook. Clears the expelled member's own
-    ///         delegation so their vote stops counting in the rep's weight. Never reverts for a
-    ///         non-delegating member, so it can never block an expulsion.
+    ///         delegation (their vote leaves the rep's weight) and zeroes the weight parked on them as
+    ///         a rep: those delegations are now permanently dead (token-bound), and their delegators
+    ///         vote directly again. Never reverts for a valid expel, so it can never block one.
+    /// @dev Called by MembershipSBT.expel AFTER the seat is removed (tokenOf(member) == 0), so every
+    ///      delegation pointing at `member` is already non-live when its count is zeroed here.
     function onMemberExpelled(address member) external {
         if (msg.sender != address(membership)) revert NotMembership();
-        address cur = delegateOf[member];
-        if (cur != address(0)) {
-            delegatorCount[cur] -= 1;
-            delete delegateOf[member];
-            emit Undelegated(member);
-        }
+        _clearDelegation(member);
+        delegatorCount[member] = 0;
     }
 
     function delegate(address rep) external {
@@ -123,21 +144,16 @@ contract CooperativeGovernor {
         // they could no longer vote and their delegators were not re-pointed, so every vote parked
         // on them was silently lost. Delegators must leave first (undelegate) to keep it flat.
         if (delegatorCount[msg.sender] != 0) revert RepresentativeHasDelegators();
-        address cur = delegateOf[msg.sender];
-        if (cur != address(0)) delegatorCount[cur] -= 1;
+        _clearDelegation(msg.sender);
         delegateOf[msg.sender] = rep;
+        delegateTokenOf[msg.sender] = membership.tokenOf(rep);
         delegatorCount[rep] += 1;
         emit Delegated(msg.sender, rep);
     }
 
     function undelegate() external {
         if (block.timestamp <= lastVotingDeadline) revert DelegationLocked();
-        address cur = delegateOf[msg.sender];
-        if (cur != address(0)) {
-            delegatorCount[cur] -= 1;
-            delegateOf[msg.sender] = address(0);
-            emit Undelegated(msg.sender);
-        }
+        _clearDelegation(msg.sender);
     }
 
     // --- proposals ---

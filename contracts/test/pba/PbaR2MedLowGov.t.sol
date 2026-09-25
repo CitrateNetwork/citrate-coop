@@ -111,9 +111,11 @@ contract PbaR2GovernanceMedLowTest is PbaR2Base {
         assertFalse(_try(workers[1], address(gov), abi.encodeWithSelector(CooperativeGovernor.revealVote.selector, id, CooperativeGovernor.Choice.Yes, BALLOT_SALT)), "domain-free ballot accepted");
     }
 
-    /// TRIPWIRE (COOP-02 + PBA-L2-015 class guard): under random delegate / undelegate / expel /
-    /// admit sequences, the weight the seated, undelegated members can cast accounts for every seated
-    /// member exactly once (expelled members' votes vanish, their delegators are never stranded).
+    /// TRIPWIRE (COOP-02 + PBA-L2-015 class guard, implementation-independent): after random
+    /// delegate / undelegate / expel / admit / RE-ADMIT (same address, new seat) sequences, hold a real
+    /// ballot where every seated member tries to vote Yes (members who cannot vote directly because
+    /// they are delegated just fail to commit). The Yes tally must equal the member count: no vote is
+    /// lost to a stale or re-formed delegation chain, and none is counted twice.
     function testFuzz_PBA_L2_040_weight_conserved_across_expulsions(uint256 seed) public {
         address[] memory pool_ = new address[](12);
         for (uint256 i = 0; i < 6; i++) pool_[i] = workers[i];
@@ -122,27 +124,43 @@ contract PbaR2GovernanceMedLowTest is PbaR2Base {
         for (uint256 step = 0; step < 30; step++) {
             uint256 r = uint256(keccak256(abi.encode(seed, step)));
             address a = pool_[r % admitted];
-            uint256 op = (r >> 8) % 5;
+            uint256 op = (r >> 8) % 6;
             if (op == 0 && admitted < 12) {
                 _admit(pool_[admitted++], MembershipSBT.MemberClass.Worker);
             } else if (op == 1) {
                 if (sbt.isMember(a)) _try(registrar, address(sbt), abi.encodeWithSelector(MembershipSBT.expel.selector, a));
             } else if (op == 2) {
                 _try(a, address(gov), abi.encodeWithSelector(CooperativeGovernor.undelegate.selector));
+            } else if (op == 3) {
+                if (!sbt.isMember(a)) _admit(a, MembershipSBT.MemberClass.Worker); // re-admission, same address
             } else {
                 _try(a, address(gov), abi.encodeWithSelector(CooperativeGovernor.delegate.selector, pool_[(r >> 16) % admitted]));
             }
         }
-        uint256 attainable;
-        for (uint256 i = 0; i < admitted; i++) {
-            address m = pool_[i];
-            if (!sbt.isMember(m)) continue;
-            address d = gov.delegateOf(m);
-            if (d != address(0) && sbt.isMember(d)) continue; // a live delegator: counted at the rep
-            attainable += 1 + gov.delegatorCount(m); // self + delegators parked on m
+        _assertEveryVoteCounts(pool_, admitted);
+    }
+
+    function _assertEveryVoteCounts(address[] memory pool_, uint256 admitted) internal {
+        address proposer;
+        for (uint256 i = 0; i < admitted && proposer == address(0); i++) {
+            if (sbt.isMember(pool_[i])) proposer = pool_[i]; // pool_ holds only workers
         }
-        // investors[0] is a seated, never-delegating member outside pool_
-        attainable += 1 + gov.delegatorCount(investors[0]);
-        assertEq(attainable, sbt.memberCount(), "vote weight lost or double counted across expulsions");
+        // Approval kind (allowed for any call) so the seated investor votes too.
+        uint256 id = _propose(proposer, address(target), _setValueCall(1), CooperativeGovernor.Kind.Approval);
+        address[] memory voters = new address[](admitted + 1);
+        for (uint256 i = 0; i < admitted; i++) voters[i] = pool_[i];
+        voters[admitted] = investors[0];
+        bool[] memory committed = new bool[](voters.length);
+        for (uint256 i = 0; i < voters.length; i++) {
+            if (!sbt.isMember(voters[i])) continue;
+            bytes32 h = _ballot(id, CooperativeGovernor.Choice.Yes, BALLOT_SALT, voters[i]);
+            committed[i] = _try(voters[i], address(gov), abi.encodeWithSelector(CooperativeGovernor.commitVote.selector, id, h));
+        }
+        vm.warp(_commitDeadline(id) + 1);
+        for (uint256 i = 0; i < voters.length; i++) {
+            if (committed[i]) _reveal(id, voters[i], CooperativeGovernor.Choice.Yes);
+        }
+        (uint256 yes,) = gov.getTally(id);
+        assertEq(yes, sbt.memberCount(), "a seated member's vote was lost or double counted");
     }
 }

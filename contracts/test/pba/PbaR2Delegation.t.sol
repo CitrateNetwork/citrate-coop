@@ -42,6 +42,60 @@ contract PbaR2DelegationTest is PbaR2Base {
         assertEq(gov.delegatorCount(workers[2]), 1);
     }
 
+    /// Verifier bypass test_V_L2_015_chain_via_expel_readmit, inverted: R -> X, X expelled, D -> R,
+    /// X re-admitted at the same address. The old R -> X delegation must stay dead (it was bound to X's
+    /// former seat), so R votes for R + D and no vote is lost.
+    function test_PBA_L2_015_expel_readmit_does_not_reform_chain() public {
+        address D = workers[0];
+        address R = workers[1];
+        address X = workers[2];
+        vm.prank(R); gov.delegate(X);
+        _expel(X);
+        vm.prank(D); gov.delegate(R);
+        _admit(X, MembershipSBT.MemberClass.Worker); // same address, new seat
+        assertEq(gov.delegatorCount(X), 0, "readmitted rep inherited stale delegators");
+
+        uint256 id = _propose(workers[3], address(target), _setValueCall(1), CooperativeGovernor.Kind.Standard);
+        bytes32 h = _ballot(id, CooperativeGovernor.Choice.Yes, BALLOT_SALT, R);
+        vm.prank(R);
+        (bool ok,) = address(gov).call(abi.encodeWithSelector(CooperativeGovernor.commitVote.selector, id, h));
+        assertTrue(ok, "stale delegation to a readmitted rep blocked R from voting");
+        _commit(id, X, CooperativeGovernor.Choice.Yes);
+        vm.warp(_commitDeadline(id) + 1);
+        _reveal(id, R, CooperativeGovernor.Choice.Yes);
+        _reveal(id, X, CooperativeGovernor.Choice.Yes);
+        (uint256 yes,) = gov.getTally(id);
+        assertEq(yes, 3, "D's vote was lost to a re-formed chain"); // R(1) + D(1) + X(1)
+    }
+
+    /// Stale delegations can be cleared and re-pointed without underflow, and a readmitted member can
+    /// be delegated to afresh.
+    function test_PBA_L2_015_stale_delegation_repoint_after_readmit() public {
+        address R = workers[1];
+        address X = workers[2];
+        vm.prank(R); gov.delegate(X);
+        _expel(X);
+        _admit(X, MembershipSBT.MemberClass.Worker);
+        vm.prank(R); gov.undelegate();          // clears the dead pointer, no underflow
+        vm.prank(R); gov.delegate(X);           // fresh, live delegation to X's new seat
+        assertEq(gov.delegatorCount(X), 1);
+        assertEq(gov.delegateOf(R), X);
+    }
+
+    /// Verifier NEW-2: only the MembershipSBT may call the expel hook. Unguarded, anyone could strip any
+    /// member's delegation (and zero a rep's weight) mid-vote.
+    function test_PBA_L2_040_expel_hook_is_membership_only() public {
+        vm.prank(workers[0]); gov.delegate(workers[1]);
+        vm.prank(address(0xBAD));
+        vm.expectRevert(bytes4(keccak256("NotMembership()")));
+        gov.onMemberExpelled(workers[0]);
+        vm.prank(workers[1]);
+        vm.expectRevert(bytes4(keccak256("NotMembership()")));
+        gov.onMemberExpelled(workers[1]);
+        assertEq(gov.delegateOf(workers[0]), workers[1]);
+        assertEq(gov.delegatorCount(workers[1]), 1);
+    }
+
     /// TRIPWIRE (the audit's "sum of attainable weight == memberCount"): after any sequence of
     /// delegate/undelegate calls, the weight the active voters can cast (1 + delegators each)
     /// accounts for every member exactly once.
