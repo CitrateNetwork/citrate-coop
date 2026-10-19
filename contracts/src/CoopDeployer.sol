@@ -12,14 +12,14 @@ import "./CooperativeGovernor.sol";
 ///         + CooperativeGovernor). It is created ONCE by the factory's constructor and stored, so
 ///         its bytecode lives in the factory's INIT-code (constructor), not its runtime. Runtime
 ///         moves under the limit; the frozen CREATE2 factory address just re-freezes once.
-/// @dev Behaviour is identical to the old inline deploy. The Pool is `Auth` — its constructor
-///      grants DEFAULT_ADMIN to whoever deploys it (here, this deployer), so we hand that admin
-///      to the calling factory and renounce ours; the end state is byte-for-byte what inlining
-///      produced. The Governor is not `Auth` (no admin). Only the factory that created this
-///      deployer calls it; the Pool admin is transferred to `msg.sender` (that factory).
+/// @dev Behaviour is identical to the old inline deploy. The Pool is `Auth` with an EXPLICIT
+///      initial admin: this helper names its caller (the factory) as the Pool's DEFAULT_ADMIN, so
+///      the helper itself never holds a role and there is no grant/renounce hop. The Governor is
+///      not `Auth` (no admin). A caller other than the factory only ever administers the pool it
+///      itself asked for, exactly as before.
 contract CoopDeployer {
-    /// @notice Deploy the reward pool + governor for one co-op and hand the Pool's admin to the
-    ///         caller (the factory), which then wires roles + hands admin to the owner.
+    /// @notice Deploy the reward pool + governor for one co-op with the caller (the factory) as the
+    ///         Pool's explicit initial admin; the factory then wires roles + hands admin to the owner.
     /// @param saltToken       the SALT ERC-20 (ModelCooperative/Pool treasury asset)
     /// @param ledger          the co-op's PatronageLedger
     /// @param kyc             the KYC registry
@@ -38,15 +38,12 @@ contract CoopDeployer {
         address sbt,
         address coop
     ) external returns (address pool, address governor) {
-        ContributionRewardPool p =
-            new ContributionRewardPool(saltToken, ledger, kyc, reserveTreasury, reserveBps, vestWindow);
-        // Pool.Auth granted DEFAULT_ADMIN to this deployer at construction. Hand it to the
-        // factory (msg.sender) and renounce ours, so the factory can grant YEAR_KEEPER_ROLE and
-        // then hand admin to the owner — the same end state as the pre-refactor inline deploy.
-        p.grantRole(p.DEFAULT_ADMIN_ROLE(), msg.sender);
-        p.revokeRole(p.DEFAULT_ADMIN_ROLE(), address(this));
+        // Explicit initial admin = the calling factory, so it can grant YEAR_KEEPER_ROLE and then
+        // hand admin to the owner — the same end state as the pre-refactor inline deploy.
+        pool = address(
+            new ContributionRewardPool(saltToken, ledger, kyc, reserveTreasury, reserveBps, vestWindow, msg.sender)
+        );
 
         governor = address(new CooperativeGovernor(sbt, coop)); // not Auth — no admin handoff
-        pool = address(p);
     }
 }

@@ -79,9 +79,9 @@ contract DividendConservationTest is Test {
         salt = new MockERC20();
         kyc = new MockKYC();
         bytes32[] memory models = new bytes32[](0);
-        sbt = new MembershipSBT(address(kyc), models);
-        ledger = new PatronageLedger(address(kyc), address(sbt));
-        coop = new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("model"));
+        sbt = new MembershipSBT(address(kyc), models, address(this), address(this));
+        ledger = new PatronageLedger(address(kyc), address(sbt), address(this));
+        coop = new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("model"), address(this));
         coop.setGovernor(address(this));
 
         address[] memory m = new address[](3);

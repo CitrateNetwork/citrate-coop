@@ -82,7 +82,8 @@ contract PatronageLedger is Auth {
     error ComputeTooLarge();  // PBA-L2-040 B-019
     error BadWeights();       // PBA-L2-040 B-018
 
-    constructor(address kycRegistry, address membership_) {
+    /// @param initialAdmin sole initial DEFAULT_ADMIN_ROLE holder (explicit; see Auth)
+    constructor(address kycRegistry, address membership_, address initialAdmin) Auth(initialAdmin) {
         kyc = IKYCRegistry(kycRegistry);
         membership = IMembership(membership_);
     }

@@ -42,9 +42,9 @@ contract CooperativeGovernorTest is Test {
         salt = new MockERC20();
         kyc = new MockKYC();
         bytes32[] memory models = new bytes32[](0);
-        sbt = new MembershipSBT(address(kyc), models);
-        ledger = new PatronageLedger(address(kyc), address(sbt));
-        coop = new ModelCooperative(address(salt), address(kyc), address(ledger), MODEL);
+        sbt = new MembershipSBT(address(kyc), models, address(this), address(this));
+        ledger = new PatronageLedger(address(kyc), address(sbt), address(this));
+        coop = new ModelCooperative(address(salt), address(kyc), address(ledger), MODEL, address(this));
         gov = new CooperativeGovernor(address(sbt), address(coop));
         coop.setGovernor(address(gov));
         registry = new MockModelRegistry();

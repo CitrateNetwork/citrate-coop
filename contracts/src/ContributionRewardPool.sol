@@ -62,8 +62,9 @@ contract ContributionRewardPool is Auth {
         address kyc_,
         address coopTreasury_,
         uint16 reserveBps_,
-        uint64 vestWindow_
-    ) {
+        uint64 vestWindow_,
+        address initialAdmin // sole initial DEFAULT_ADMIN_ROLE holder (explicit; see Auth)
+    ) Auth(initialAdmin) {
         salt = IERC20(salt_);
         ledger = PatronageLedger(ledger_);
         kyc = IKYCRegistry(kyc_);

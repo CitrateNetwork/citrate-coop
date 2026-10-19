@@ -186,8 +186,8 @@ contract CitrateAdminSafeTest is Test {
     function test_safe_administers_the_ledger() public {
         MockKYC kyc = new MockKYC();
         bytes32[] memory models = new bytes32[](0);
-        MembershipSBT sbt = new MembershipSBT(address(kyc), models);
-        PatronageLedger ledger = new PatronageLedger(address(kyc), address(sbt));
+        MembershipSBT sbt = new MembershipSBT(address(kyc), models, address(this), address(this));
+        PatronageLedger ledger = new PatronageLedger(address(kyc), address(sbt), address(this));
 
         // hand DEFAULT_ADMIN to the safe, renounce this test's admin (mirrors the rotation runbook)
         ledger.grantRole(ledger.DEFAULT_ADMIN_ROLE(), address(safe));

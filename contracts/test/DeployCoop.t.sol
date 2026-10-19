@@ -50,7 +50,7 @@ contract DeployCoopDeterminismTest is Test {
             // creationCode, so its canonical CREATE2 address moves deliberately from the
             // stale 0xd7CBAeB1…56Fe (0.8.26 freeze) to this 0.8.36 value. Co-op factory is
             // not yet deployed on 40204, so the address manifest must be regenerated to match.
-            0x37226c9510D203822E9CF80f03A1FD8e92e1916a, // FROZEN CoopDeployer canonical (solc 0.8.36, PBA R2 re-freeze)
+            0x1F413757EF7e5382c41c726842F68D138aF21879, // FROZEN CoopDeployer canonical (role-holder validation)
             "CoopDeployer canonical CREATE2 address drifted"
         );
         // The factory address now folds the CoopDeployer arg into init_code:
@@ -74,7 +74,17 @@ contract DeployCoopDeterminismTest is Test {
             // CoopDeployer (0xbfFD95A5…9Aac4 -> 0x37226c95…916a) and the factory
             // (0xcEa67502…A3Ff -> this value) move. The co-op is not deployed on 40204, so nothing
             // on-chain references the old values; regenerate the address manifest at the ceremony.
-            0x9476F7b1D5b730ECaC82618edeFA6930442Ef8ac,
+            // Re-frozen 2026-10-18 (explicit-initial-admin, deliberate): Auth now takes the initial
+            // DEFAULT_ADMIN as a constructor argument (and MembershipSBT the initial registrar)
+            // instead of inferring it from msg.sender, and CoopDeployer passes its caller as the
+            // Pool admin. Every Auth child's creationCode changes, so CoopDeployer
+            // (0x37226c95…916a -> 0xEa9c96D7…E717) and the factory (0x9476F7b1…f8ac -> this value)
+            // move. The co-op is not deployed on 40204; regenerate the address manifest at the ceremony.
+            // Re-frozen 2026-10-18 (role-holder validation, deliberate): every Auth grant path now
+            // validates the recipient and the last-admin guard counts only usable holders, so every
+            // Auth child's creationCode changes: CoopDeployer (0xEa9c96D7…E717 -> 0x1F413757…1879)
+            // and the factory (0xA1FB3922…544b -> this value) move. Not deployed on 40204.
+            0xBa1a542Cf2D3aFAFf87710C32144c2DA8665dA81,
             "co-op factory canonical CREATE2 address drifted"
         );
     }

@@ -26,8 +26,8 @@ contract PatronageLedgerTest is Test {
     function setUp() public {
         kyc = new MockKYC();
         bytes32[] memory models = new bytes32[](0);
-        sbt = new MembershipSBT(address(kyc), models);
-        ledger = new PatronageLedger(address(kyc), address(sbt));
+        sbt = new MembershipSBT(address(kyc), models, address(this), address(this));
+        ledger = new PatronageLedger(address(kyc), address(sbt), address(this));
         // this test contract is admin → grant itself the settler + coop + year-keeper roles
         ledger.grantRole(ledger.SETTLER_ROLE(), address(this));
         ledger.grantRole(ledger.COOP_ROLE(), address(this));

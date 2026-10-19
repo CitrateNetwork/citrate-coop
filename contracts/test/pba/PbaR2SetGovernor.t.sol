@@ -29,7 +29,8 @@ contract PbaR2SetGovernorTest is PbaR2Base {
 
     /// The one legitimate call (factory wiring) still works on a fresh co-op, and a zero governor is refused.
     function test_PBA_L2_019_first_set_works_zero_refused() public {
-        ModelCooperative fresh = new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("m"));
+        ModelCooperative fresh =
+            new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("m"), address(this));
         assertFalse(_trySetOn(fresh, address(this), address(0)), "zero governor must be refused");
         assertTrue(_trySetOn(fresh, address(this), address(0x60)));
         assertEq(fresh.governor(), address(0x60));

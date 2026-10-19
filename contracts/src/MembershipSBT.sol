@@ -61,10 +61,16 @@ contract MembershipSBT is Auth {
     error HookAlreadySet();
     error ZeroHook();
 
-    constructor(address kycRegistry, bytes32[] memory modelIds) {
+    /// @param initialAdmin     sole initial DEFAULT_ADMIN_ROLE holder (see Auth)
+    /// @param initialRegistrar sole initial REGISTRAR_ROLE holder (bootstrap onboarding). Explicit —
+    ///                         never `msg.sender` — for the same reason as the admin.
+    constructor(address kycRegistry, bytes32[] memory modelIds, address initialAdmin, address initialRegistrar)
+        Auth(initialAdmin)
+    {
+        _requireHolder(initialRegistrar);
         kyc = IKYCRegistry(kycRegistry);
         projectModelIds = modelIds;
-        _grant(REGISTRAR_ROLE, msg.sender);
+        _grantAs(REGISTRAR_ROLE, initialRegistrar, address(0)); // construction-time grant (see Auth)
     }
 
     // --- minting / membership ---

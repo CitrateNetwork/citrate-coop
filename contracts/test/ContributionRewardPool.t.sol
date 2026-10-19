@@ -35,9 +35,11 @@ contract ContributionRewardPoolTest is Test {
         salt = new MockERC20();
         kyc = new MockKYC();
         bytes32[] memory models = new bytes32[](0);
-        sbt = new MembershipSBT(address(kyc), models);
-        ledger = new PatronageLedger(address(kyc), address(sbt));
-        pool = new ContributionRewardPool(address(salt), address(ledger), address(kyc), treasury, 2000, VEST);
+        sbt = new MembershipSBT(address(kyc), models, address(this), address(this));
+        ledger = new PatronageLedger(address(kyc), address(sbt), address(this));
+        pool = new ContributionRewardPool(
+            address(salt), address(ledger), address(kyc), treasury, 2000, VEST, address(this)
+        );
 
         // fund the pool with the full 50M emission
         salt.mint(address(pool), 50_000_000 ether);
