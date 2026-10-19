@@ -32,9 +32,9 @@ contract ModelCooperativeTest is Test {
         salt = new MockERC20();
         kyc = new MockKYC();
         bytes32[] memory models = new bytes32[](0);
-        sbt = new MembershipSBT(address(kyc), models);
-        ledger = new PatronageLedger(address(kyc), address(sbt));
-        coop = new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("model"));
+        sbt = new MembershipSBT(address(kyc), models, address(this), address(this));
+        ledger = new PatronageLedger(address(kyc), address(sbt), address(this));
+        coop = new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("model"), address(this));
 
         ledger.grantRole(ledger.SETTLER_ROLE(), address(this));
         ledger.grantRole(ledger.COOP_ROLE(), address(coop));
@@ -109,7 +109,8 @@ contract ModelCooperativeTest is Test {
 
     // CoopLifecycle.tla::Inv_NoRevenueBeforeActive — revenue can't be taken while Forming
     function test_revenue_before_active_reverts() public {
-        ModelCooperative fresh = new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("m2"));
+        ModelCooperative fresh =
+            new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("m2"), address(this));
         fresh.setGovernor(address(this));
         salt.mint(address(this), 100);
         salt.approve(address(fresh), 100);
@@ -131,7 +132,8 @@ contract ModelCooperativeTest is Test {
 
     // adversarial: only the governor drives lifecycle
     function test_only_governor_lifecycle() public {
-        ModelCooperative fresh = new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("m3"));
+        ModelCooperative fresh =
+            new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("m3"), address(this));
         fresh.setGovernor(address(0x60));
         vm.expectRevert(ModelCooperative.NotGovernor.selector);
         fresh.activate();

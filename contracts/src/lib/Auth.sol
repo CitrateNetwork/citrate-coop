@@ -2,7 +2,11 @@
 pragma solidity ^0.8.26;
 
 /// @title Auth — minimal role-based access control (RFC-CIT-COOP-0001)
-/// @notice Tiny, dependency-free AccessControl. Deployer gets DEFAULT_ADMIN_ROLE.
+/// @notice Tiny, dependency-free AccessControl. The initial DEFAULT_ADMIN_ROLE holder is passed
+///         EXPLICITLY to the constructor — it is never inferred from `msg.sender`.
+/// @dev The initial admin is an explicit, audited deploy input rather than the deploying
+///      account, so the role holder is whatever the deploy names. The canonical CREATE2
+///      deployer is rejected as a holder because it is a permissionless relay.
 abstract contract Auth {
     bytes32 public constant DEFAULT_ADMIN_ROLE = 0x00;
 
@@ -13,11 +17,24 @@ abstract contract Auth {
     event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);
     event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender);
 
+    /// Canonical (Arachnid) CREATE2 deployer — a permissionless relay; never a valid role holder.
+    address internal constant CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+
     error Unauthorized(bytes32 role, address account);
     error LastAdmin();
+    error ZeroRoleHolder();
+    error Create2DeployerAsHolder();
 
-    constructor() {
-        _grant(DEFAULT_ADMIN_ROLE, msg.sender);
+    /// @param initialAdmin the sole initial DEFAULT_ADMIN_ROLE holder (non-zero, not the CREATE2 relay)
+    constructor(address initialAdmin) {
+        _requireHolder(initialAdmin);
+        _grantAs(DEFAULT_ADMIN_ROLE, initialAdmin, address(0));
+    }
+
+    /// @dev Reject the zero address and the CREATE2 relay as an initial role holder.
+    function _requireHolder(address account) internal pure {
+        if (account == address(0)) revert ZeroRoleHolder();
+        if (account == CREATE2_DEPLOYER) revert Create2DeployerAsHolder();
     }
 
     modifier onlyRole(bytes32 role) {
@@ -45,10 +62,17 @@ abstract contract Auth {
     }
 
     function _grant(bytes32 role, address account) internal {
+        _grantAs(role, account, msg.sender);
+    }
+
+    /// @dev Grant with an explicit `sender` for the event. Constructors use this with
+    ///      `sender = address(0)` (a construction-time grant from an explicit argument), so no
+    ///      code path reachable from a constructor reads `msg.sender`.
+    function _grantAs(bytes32 role, address account, address sender) internal {
         if (!_roles[role][account]) {
             if (role == DEFAULT_ADMIN_ROLE) _adminCount += 1;
             _roles[role][account] = true;
-            emit RoleGranted(role, account, msg.sender);
+            emit RoleGranted(role, account, sender);
         }
     }
 }

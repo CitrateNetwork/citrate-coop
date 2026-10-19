@@ -37,7 +37,7 @@ contract PbaR2BoundsMedLowTest is PbaR2Base {
 
     // B-018: the ramp hold period is bounded (0 erases the ACH-return window; huge freezes credits).
     function test_PBA_L2_040_B018_hold_period_bounded() public {
-        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days);
+        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days, address(this));
         assertFalse(_try(address(this), address(ramp), abi.encodeWithSelector(CooperativeFiatRamp.setHoldPeriod.selector, uint64(0))), "zero hold accepted");
         assertFalse(_try(address(this), address(ramp), abi.encodeWithSelector(CooperativeFiatRamp.setHoldPeriod.selector, uint64(3650 days))), "decade hold accepted");
         assertTrue(_try(address(this), address(ramp), abi.encodeWithSelector(CooperativeFiatRamp.setHoldPeriod.selector, uint64(7 days))));
@@ -52,13 +52,15 @@ contract PbaR2BoundsMedLowTest is PbaR2Base {
     // COOP-05: reserveBps > 10_000 made distributable() underflow (every claim reverts).
     function test_PBA_L2_040_COOP05_reserve_bps_bounded() public {
         vm.expectRevert();
-        new ContributionRewardPool(address(salt), address(ledger), address(kyc), reserveTreasury, 20_000, 365 days);
+        new ContributionRewardPool(
+            address(salt), address(ledger), address(kyc), reserveTreasury, 20_000, 365 days, address(this)
+        );
     }
 
     // B-013: after dissolution a pending fiat credit can never be released (depositRevenue reverts
     // WrongState); the custodian must be able to charge it back and recover the wSALT.
     function test_PBA_L2_040_B013_ramp_rescue_after_dissolve() public {
-        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days);
+        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days, address(this));
         address attestor = address(0xA77E);
         ramp.grantRole(ramp.ATTESTOR_ROLE(), attestor);
         salt.mint(address(ramp), 1_000);
@@ -78,7 +80,7 @@ contract PbaR2BoundsMedLowTest is PbaR2Base {
 
     // B-013 safety twin: the rescue can never touch wSALT backing a still-pending credit.
     function test_PBA_L2_040_B013_rescue_cannot_touch_pending() public {
-        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days);
+        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days, address(this));
         address attestor = address(0xA77E);
         ramp.grantRole(ramp.ATTESTOR_ROLE(), attestor);
         salt.mint(address(ramp), 1_500);
@@ -90,7 +92,7 @@ contract PbaR2BoundsMedLowTest is PbaR2Base {
     // B-013 (verifier NEW-4): a withdrawal of charged-back reserve must release it from rampReserve,
     // or every later creditFromFiat is over-constrained by a reserve that no longer exists.
     function test_PBA_L2_040_B013_credit_works_after_reserve_withdrawal() public {
-        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days);
+        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days, address(this));
         address attestor = address(0xA77E);
         ramp.grantRole(ramp.ATTESTOR_ROLE(), attestor);
         salt.mint(address(ramp), 1_000);
@@ -134,24 +136,27 @@ contract PbaR2BoundsTripwireTest is PbaR2Base {
     }
 
     function testFuzz_PBA_L2_040_hold_and_reserve_bounded(uint64 h, uint16 bps) public {
-        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days);
+        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days, address(this));
         (bool ok,) = address(ramp).call(abi.encodeWithSelector(CooperativeFiatRamp.setHoldPeriod.selector, h));
         assertEq(ok, h >= 1 days && h <= 90 days);
         // forge >= 1.8 routes `new` in tests through VM::deployCode, so a constructor revert cannot be
         // caught with try/catch. Branch on the input and assert each outcome explicitly instead.
         if (bps > 10_000) {
             vm.expectRevert(bytes4(keccak256("BadReserveBps()")));
-            new ContributionRewardPool(address(salt), address(ledger), address(kyc), reserveTreasury, bps, 365 days);
+            new ContributionRewardPool(
+                address(salt), address(ledger), address(kyc), reserveTreasury, bps, 365 days, address(this)
+            );
         } else {
-            ContributionRewardPool p =
-                new ContributionRewardPool(address(salt), address(ledger), address(kyc), reserveTreasury, bps, 365 days);
+            ContributionRewardPool p = new ContributionRewardPool(
+                address(salt), address(ledger), address(kyc), reserveTreasury, bps, 365 days, address(this)
+            );
             assertLe(p.distributable(), p.ANNUAL());
         }
     }
 
     /// Ramp rescue never under-backs a pending credit, whatever is credited, charged back or withdrawn.
     function testFuzz_PBA_L2_040_ramp_withdraw_keeps_pending_backed(uint96 fund, uint96 credit, uint96 take, bool chargeBack) public {
-        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days);
+        CooperativeFiatRamp ramp = new CooperativeFiatRamp(address(salt), address(coop), 5 days, address(this));
         address attestor = address(0xA77E);
         ramp.grantRole(ramp.ATTESTOR_ROLE(), attestor);
         salt.mint(address(ramp), fund);

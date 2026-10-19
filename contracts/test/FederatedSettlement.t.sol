@@ -32,8 +32,8 @@ contract FederatedSettlementTest is Test {
     function setUp() public {
         kyc = new MockKYC();
         bytes32[] memory models = new bytes32[](0);
-        sbt = new MembershipSBT(address(kyc), models);
-        ledger = new PatronageLedger(address(kyc), address(sbt));
+        sbt = new MembershipSBT(address(kyc), models, address(this), address(this));
+        ledger = new PatronageLedger(address(kyc), address(sbt), address(this));
         ledger.grantRole(ledger.SETTLER_ROLE(), coordinator);
 
         address[3] memory ns = [nodeA, nodeB, nodeC];

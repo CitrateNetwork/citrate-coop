@@ -53,7 +53,8 @@ contract CooperativeFiatRamp is Auth {
     error BadHoldPeriod();
     error ZeroRecipient();
 
-    constructor(address salt_, address coop_, uint64 holdPeriod_) {
+    /// @param initialAdmin sole initial DEFAULT_ADMIN_ROLE holder (explicit; see Auth)
+    constructor(address salt_, address coop_, uint64 holdPeriod_, address initialAdmin) Auth(initialAdmin) {
         salt = IERC20(salt_);
         coop = ICoopRevenue(coop_);
         if (holdPeriod_ < MIN_HOLD || holdPeriod_ > MAX_HOLD) revert BadHoldPeriod();

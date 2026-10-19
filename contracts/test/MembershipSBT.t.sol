@@ -26,7 +26,7 @@ contract MembershipSBTTest is Test {
         kyc = new MockKYC();
         bytes32[] memory models = new bytes32[](1);
         models[0] = keccak256("nat-community-model-v1");
-        sbt = new MembershipSBT(address(kyc), models);
+        sbt = new MembershipSBT(address(kyc), models, address(this), address(this));
         kyc.set(alice, true, keccak256("identity:alice"));
         kyc.set(bob, true, keccak256("identity:bob"));
         kyc.set(alice2, true, keccak256("identity:alice")); // same identity

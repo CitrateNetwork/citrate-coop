@@ -63,9 +63,9 @@ contract RevenueRoutingTest is Test {
         salt = new MockERC20();
         kyc = new MockKYC();
         bytes32[] memory models = new bytes32[](0);
-        sbt = new MembershipSBT(address(kyc), models);
-        ledger = new PatronageLedger(address(kyc), address(sbt));
-        coop = new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("model"));
+        sbt = new MembershipSBT(address(kyc), models, address(this), address(this));
+        ledger = new PatronageLedger(address(kyc), address(sbt), address(this));
+        coop = new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("model"), address(this));
         ledger.grantRole(ledger.SETTLER_ROLE(), address(this));
         ledger.grantRole(ledger.COOP_ROLE(), address(coop));
         coop.setGovernor(address(this));
@@ -121,7 +121,8 @@ contract RevenueRoutingTest is Test {
 
     // adversarial: sync before Active reverts (no revenue before product)
     function test_sync_before_active_reverts() public {
-        ModelCooperative fresh = new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("m2"));
+        ModelCooperative fresh =
+            new ModelCooperative(address(salt), address(kyc), address(ledger), keccak256("m2"), address(this));
         fresh.setGovernor(address(this));
         salt.mint(address(fresh), 100);
         vm.expectRevert(ModelCooperative.WrongState.selector);

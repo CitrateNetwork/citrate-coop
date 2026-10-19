@@ -54,7 +54,10 @@ contract ModelCooperative is Auth, ReentrancyGuard {
         _;
     }
 
-    constructor(address salt_, address kyc_, address ledger_, bytes32 modelHash_) {
+    /// @param initialAdmin sole initial DEFAULT_ADMIN_ROLE holder (explicit; see Auth)
+    constructor(address salt_, address kyc_, address ledger_, bytes32 modelHash_, address initialAdmin)
+        Auth(initialAdmin)
+    {
         salt = IERC20(salt_);
         kyc = IKYCRegistry(kyc_);
         ledger = PatronageLedger(ledger_);

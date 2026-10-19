@@ -40,6 +40,10 @@ contract CitrateCooperativeFactory {
     /// never be re-pointed at another one (the prior code let anyone overwrite it with a co-op wired
     /// to their own settler/registrar/admin).
     error ModelAlreadyHasCooperative(bytes32 modelHash);
+    error BadFinalAdmin();
+
+    /// Canonical (Arachnid) CREATE2 deployer — a permissionless relay; never a valid admin.
+    address internal constant CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
     struct Params {
         address salt;
@@ -72,9 +76,17 @@ contract CitrateCooperativeFactory {
 
     function createCooperative(Params calldata p) external returns (Coop memory c) {
         if (cooperativeOf[p.modelHash] != address(0)) revert ModelAlreadyHasCooperative(p.modelHash);
-        MembershipSBT sbt = new MembershipSBT(p.kyc, p.modelIds);
-        PatronageLedger ledger = new PatronageLedger(p.kyc, address(sbt));
-        ModelCooperative coop = new ModelCooperative(p.salt, p.kyc, address(ledger), p.modelHash);
+        // The final admin must be a real holder: a zero admin would strand every child once the
+        // factory renounces, and the permissionless CREATE2 relay must never hold a role.
+        if (p.admin == address(0) || p.admin == CREATE2_DEPLOYER) revert BadFinalAdmin();
+        // Explicit initial admin: the factory INTENTIONALLY administers each child for the duration
+        // of this call (it must wire roles + the governor/hook below), so it passes address(this)
+        // as the initial DEFAULT_ADMIN — explicitly, never via the child's msg.sender — and hands
+        // that admin to `p.admin` (and renounces) before returning. The bootstrap registrar is
+        // passed straight to the SBT, so the factory never holds REGISTRAR_ROLE at all.
+        MembershipSBT sbt = new MembershipSBT(p.kyc, p.modelIds, address(this), p.registrar);
+        PatronageLedger ledger = new PatronageLedger(p.kyc, address(sbt), address(this));
+        ModelCooperative coop = new ModelCooperative(p.salt, p.kyc, address(ledger), p.modelHash, address(this));
         // SETL-H2 fix: the CRP reserve MUST go to a treasury distinct from the co-op. If it flowed to
         // the co-op, the permissionless syncDirectRevenue would reclassify the held reserve as member
         // dividends (defeating the reserve, and via SETL-C1 making it rug-able at dissolve).
@@ -83,7 +95,7 @@ contract CitrateCooperativeFactory {
             "reserveTreasury must be a separate, non-zero address"
         );
         // Pool + Governor are deployed by the helper (their creationCode lives there, not here).
-        // The helper hands the Pool's DEFAULT_ADMIN back to this factory before returning.
+        // The helper names this factory (its caller) as the Pool's explicit initial DEFAULT_ADMIN.
         (address poolAddr, address govAddr) = deployer.deployPoolAndGovernor(
             p.salt, address(ledger), p.kyc, p.reserveTreasury, p.reserveBps, p.vestWindow, address(sbt), address(coop)
         );
@@ -103,7 +115,7 @@ contract CitrateCooperativeFactory {
         // the governor was unreachable and no cohort could ever be closed (or grant forfeited).
         pool.grantRole(pool.YEAR_KEEPER_ROLE(), address(coop));
 
-        sbt.grantRole(sbt.REGISTRAR_ROLE(), p.registrar);     // bootstrap onboarding
+        // bootstrap onboarding registrar (p.registrar) was granted in the SBT constructor
         sbt.grantRole(sbt.REGISTRAR_ROLE(), address(coop));   // governance admit/expel via execute
         sbt.setGovernanceHook(govAddr);                       // PBA-L2-040 COOP-02: expel clears delegation
 
