@@ -129,8 +129,14 @@ function recordContribution(
     require(membership.isMember(member), "not member");                 // worker-member only
 
     recorded[roundId][member] = true;
+    // NORMATIVE truncation order — matches PatronageLedger.recordContribution exactly.
+    // The data weight is folded into the quality bps FIRST, then applied to weighted compute.
+    // (An earlier draft applied quality to compute first, then wData, which
+    // diverged from the deployed code by ~11% once wData ≠ 10_000; the code is authoritative.)
+    require(dataQualityBps <= 10_000, "bad quality");                   // 0..1 in bps
     uint256 c = computeMetered * wCompute / 10_000;
-    uint256 p = c * dataQualityBps / 10_000 * wData / 10_000;           // compute × quality, weighted
+    uint256 wq = dataQualityBps * wData / 10_000;                       // quality × data-weight (truncated)
+    uint256 p = c * wq / 10_000;                                        // compute × quality, weighted
 
     uint256 y = coopYear();                                             // 0..4 (5-year program)
     _settleDividend(member);                                           // checkpoint revenue before unit change
@@ -293,9 +299,17 @@ function notifyRevenue(uint256 amountWSalt) public;     // credits the patronage
 
 ### 8.1 Rail A — On-chain SALT (works today, zero new wiring)
 
-`ModelRegistry.requestInference` pays `model.owner` the full `msg.value`; `ModelMarketplace.purchaseAccess`
-pays `listing.owner` price−2.5%. **Set the co-op as the model/listing owner → revenue lands in the
-co-op** `receive()`, which wraps to wSALT and calls `notifyRevenue`.
+`ModelRegistry.requestInference` pays `model.owner`; `ModelMarketplace.purchaseAccess` pays
+`listing.owner` price−2.5%. **Set the co-op as the model/listing owner → revenue lands in the
+co-op's SALT balance**, and anyone then calls `ModelCooperative.syncDirectRevenue()`, which
+credits the balance above the accounted (`credited − claimed`) net into the patronage dividend.
+
+> **NORMATIVE:** `ModelCooperative` has **no** `receive()`/`fallback` and no
+> `notifyRevenue`; it is **wSALT/ERC-20 end-to-end**. A native-value transfer to the co-op would
+> revert, so the co-op may be set as owner only of **wSALT-denominated** rails (or a wrapping
+> adapter must sit in front). The actual intake is the ERC-20 `syncDirectRevenue()` (pull) and
+> `depositRevenue(amount)` (push) — an earlier draft of this section described a native-value
+> `receive()` design that was never implemented.
 
 ### 8.2 Rail B — x402 micropayments
 
@@ -347,11 +361,16 @@ function notifyRevenue(uint256 amt) public {
     else { accDividendPerUnit += amt * ACC / totalUnits; }
     emit RevenueReceived(amt);
 }
+// NORMATIVE: dividendDebt is stored PRE-division (units × accDividendPerUnit), NOT post-division.
+// Storing it post-division (units × acc / ACC) lets floor(a) − floor(b) exceed floor(a − b) by up
+// to 1 wei per reset, over-accruing the pool. (See the
+// 2026-06-25 one-wei-overaccrual case study: the deployed code carries the pre-division form and
+// is authoritative; this doc previously published the known-buggy post-division formula.)
 function _settleDividend(address m) internal {
     if (units[m] > 0)
-        pendingDividend[m] += units[m] * accDividendPerUnit / ACC - dividendDebt[m];
+        pendingDividend[m] += (units[m] * accDividendPerUnit - dividendDebt[m]) / ACC;
 }
-function _resetDividendDebt(address m) internal { dividendDebt[m] = units[m] * accDividendPerUnit / ACC; }
+function _resetDividendDebt(address m) internal { dividendDebt[m] = units[m] * accDividendPerUnit; }
 
 function claimDividend() external nonReentrant {
     require(IKyc(kyc).isVerified(msg.sender), "not kyc");   // revocation re-checked at claim
