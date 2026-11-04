@@ -1,3 +1,6 @@
+
+> **Launch tokenomics: TBD before launch.** Supply, allocations, vesting, emissions, staking requirements, fees, and rewards are not finalized. More announcements coming soon. See the [current status and notice about earlier exploratory materials](https://docs.citrate.ai/chain/economics). Feedback: [support@citrate.ai](mailto:support@citrate.ai).
+
 # Citrate Model Co-op — Ownership Contract Specification (v2)
 
 > **What this is.** A buildable spec for the contract system that makes a community-trained NAT model
@@ -5,7 +8,7 @@
 > Corporation** (worker co-op under AB 816). Contributors earn **patronage** from verified work
 > (compute FLOPs × data-quality, relative to the pool); the model's revenue (on-chain SALT, x402,
 > and fiat via Stripe/Plaid) flows into a co-op treasury and is distributed as **patronage
-> dividends**; a **50M SALT** contribution-reward emission (5% of supply, 1%/yr × 5yr, linear vest)
+> dividends**; a contribution-reward policy **TBD before launch**
 > rewards contributors and seeds the reserve; governance is **one-member-one-vote** via a soulbound
 > membership token with commit-reveal (prevrandao) secret ballots and delegation to representatives.
 >
@@ -78,8 +81,8 @@ salt basis").
 | Decision (owner) | Mechanism in this spec |
 |---|---|
 | **Share rate** = work via compute + data, scored on data quality balanced with FLOPs, *relative to the pool* | **Patronage unit** minted per round = `computeMetered × dataQuality` (= nat-federated `reward_weight`), with governance weights `wCompute/wData` to rebalance. "Relative to pool" is realized because *all* distributions are pro-rata `units[m]/totalUnits`. (§5) |
-| **Founder allocation** = irrelevant; instead **5% of supply (50M SALT) over 5 yrs, 1%/yr linear vest, by individual contribution within each year's 1%** | **ContributionRewardPool (CRP)**: 5 annual cohorts of **10M SALT**, each allocated pro-rata by *that year's* patronage, each **linearly vested**. No company equity. (§6) |
-| **Reserve ratio** = comes from that 5% / 50M | A governance-set `reserveBps` is skimmed **from each annual CRP cohort** (not from revenue) into the co-op **reserve/treasury**. Revenue residuals pass through to members in full as patronage dividends. (§6.3) |
+| **Launch contribution allocation** | TBD before launch. No allocation or vesting entitlement is established by this engineering specification. |
+| **Launch reserve ratio** | TBD before launch. Model reserve parameters are experimental only. |
 | **Vesting** = linear, per-year cohort | Linear vest of each member's CRP grant over the cohort window (default 12 months from grant). (§6.2) |
 | **Voting** = prevrandao setup + 1 vote/member, no-SALT, **SBT** with agentId/modelId registry; **delegation to a representative** | **CooperativeGovernor**: one-member-one-vote over MembershipSBT; **commit-reveal secret ballot** (the chain's `IPFSIncentivesV3` prevrandao pattern); **liquid-democracy delegation**; optional prevrandao **sortition** of a representative council. (§7) |
 | **Legal wrapper** = **California Cooperative Corporation** | Worker co-op (AB 816): worker-members ≥51% votes; community-investor approval-only lane; patronage dividends; Subchapter T. (§1, §11) |
@@ -163,10 +166,10 @@ verified, order-independent federated aggregation. An auditor replays the round 
 
 ---
 
-## 6. The 50M SALT Contribution Reward Pool (CRP)
+## 6. Contribution Reward Pool (CRP): launch terms TBD
 
-5% of the 1,000,000,000 SALT supply = **50,000,000 SALT**, released **10,000,000/year for 5 years**,
-allocated by *that year's* patronage, linearly vested, with a reserve skim.
+Launch pool size, allocation, duration, vesting, and reserve terms are **TBD before launch**.
+The calculations and code examples below retain historical engineering-model inputs solely for reproducibility; they are not launch allocations or commitments.
 
 ```solidity
 // ContributionRewardPool
@@ -186,7 +189,7 @@ distributable_y = ANNUAL − (ANNUAL × reserveBps / 10_000)         // reserve 
 grant_y(m)      = distributable_y × yearUnits[y][m] / yearTotalUnits[y]
 ```
 The reserve skim (`ANNUAL × reserveBps/10_000`) is swept to the co-op reserve — this is the owner's
-"reserve comes from the 50M."
+historical model reserve rule; launch reserve terms are TBD.
 
 ### 6.2 Linear vesting
 
@@ -387,7 +390,7 @@ Forming ──(governor.activate; co-op set as ModelRegistry owner)──► Act
 3. **Worker-majority:** worker-members always ≥51% of total votes (enforced on mint / class change).
 4. **Patronage conservation:** `Σ units == totalUnits`; `Σ yearUnits[y] == yearTotalUnits[y]`.
 5. **Revenue conservation:** every wei via `notifyRevenue` ∈ {unallocated, accumulator, pending, claimed}; never lost/double-counted.
-6. **CRP conservation:** `Σ grants_y + cohortReserveTaken[y] ≤ ANNUAL`; total emitted ≤ 50M; unvested forfeits return to pool.
+6. **CRP conservation:** `Σ grants_y + cohortReserveTaken[y] ≤ ANNUAL`; total emitted ≤ the configured model cap (launch cap TBD); unvested forfeits return to pool.
 7. **No retroactive dividends / CRP:** settle-before-mutate; vesting monotonic.
 8. **Provenance binding:** patronage mints only against a committed `roundMergedHash`.
 9. **KYC fail-closed:** unverified/revoked cannot hold SBT, mint patronage, or claim.
@@ -425,7 +428,7 @@ Forming ──(governor.activate; co-op set as ModelRegistry owner)──► Act
 | WP-2 | `PatronageLedger` (units, per-round + per-year, `wCompute/wData`) + invariants 1,4,7 | ✅ |
 | WP-3 | `ModelCooperative` core: state machine, `commitRound`/`recordContribution`, dividend accumulator (§8.4) | ✅ |
 | WP-4 | Revenue Rail A (`receive`+wrap, owner-wiring fork test) + Rail B (x402 provider/treasury routing) | ✅ vs live X402/ModelRegistry |
-| WP-5 | `ContributionRewardPool` (50M, by-year alloc, linear vest, reserve skim) + invariant 6 | ✅ (needs 50M SALT allocation source) |
+| WP-5 | `ContributionRewardPool` engineering model and invariant 6 | Launch pool size, allocation and vesting TBD |
 | WP-6 | `CooperativeGovernor`: 1-vote, commit-reveal (IPFSIncentivesV3 pattern), delegation, sortition, AB-816 worker-majority | ✅ vs TreasuryGovernor pattern |
 | WP-7 | `CooperativeFiatRamp` + off-chain Stripe/Plaid custodian + attestation (Rail C) | ⚠️ needs MSB custodian + holdPeriod |
 | WP-8 | nat-federated `Settlement`-seam impl → `commitRound`+`recordContribution` (closes brief §4) | ⛔ gated on NAT Gate-4 / WP-F3-F4 |
@@ -461,8 +464,8 @@ revenue Rails A/B). WP-7 needs the MSB custodian. WP-8 is the join with the fede
 | Knob | Proposed default | Note |
 |---|---|---|
 | `wCompute` / `wData` | 10000 / 10000 (equal) | rebalance compute vs data emphasis in patronage |
-| CRP `reserveBps` | 2000 (20% of each 10M → 2M/yr reserve) | owner: "reserve from the 5%"; tune to flywheel needs |
-| CRP `VEST_WINDOW` | 365 days, linear, per-year cohort | owner: "linear vest, 1%/yr" |
+| CRP `reserveBps` | TBD before launch | Historical model input, not a launch term |
+| CRP `VEST_WINDOW` | TBD before launch | Historical model input, not a launch term |
 | Quorum / approval | 33% members / simple majority; ⅔ for merger/dissolution | AB 816 supermajority for major acts |
 | Community-investor lane | enabled, ≤$1,000, approval-only | AB 816; optional |
 | Fiat `holdPeriod` | 5 business days (ACH) | absorb returns before distribution |
@@ -470,7 +473,7 @@ revenue Rails A/B). WP-7 needs the MSB custodian. WP-8 is the join with the fede
 
 ---
 
-*End of v2. Two rails (membership + patronage), a California worker-cooperative wrapper, a 50M SALT
-contribution emission with reserve, one-member-one-vote commit-reveal governance with delegation, and
+*End of v2. Two rails (membership + patronage), a California worker-cooperative wrapper, a contribution emission with launch terms TBD
+ with reserve, one-member-one-vote commit-reveal governance with delegation, and
 three on-chain revenue rails (SALT / x402 / fiat). WP-1–6 buildable now; the federated join lands with
 NAT Gate-4.*
